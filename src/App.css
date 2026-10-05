@@ -923,3 +923,27 @@ main { min-width: 0; }
   .enrichment-head { flex-direction: column; }
   .enrichment-actions { justify-content: flex-start; }
 }
+
+.recommendation-reasons {
+  display: grid;
+  gap: 5px;
+  margin: 9px 0 10px;
+}
+.recommendation-reasons span {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  min-height: 24px;
+  padding: 5px 6px;
+  border: 1px solid rgba(139, 92, 246, .18);
+  border-radius: 7px;
+  color: #aeb5c4;
+  background: rgba(139, 92, 246, .06);
+  font-size: 8px;
+  line-height: 1.4;
+}
+.recommendation-reasons svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #a78bfa;
+}

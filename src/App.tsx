@@ -17,6 +17,7 @@ import {
   Plus,
   Search,
   Settings,
+  Sparkles,
   Star,
   Tv,
   Upload,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 import './App.css';
 import { getDiscoverHome } from './services/discover';
+import type { DiscoverMedia } from './services/discover';
 import { getMediaDetails, searchAnime, searchManga } from './services/jikan';
 import { parseMalExportXml, readMalExportFile } from './services/malImport';
 import type { MalImportPreview } from './services/malImport';
@@ -58,7 +60,13 @@ const navItems: Array<{ id: Page; label: string; icon: typeof Home }> = [
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
 
-function MediaCard({ media }: { media: Media }) {
+function MediaCard({
+  media,
+  reasons,
+}: {
+  media: Media;
+  reasons?: string[];
+}) {
   const add = useLibraryStore((state) => state.add);
   const openMedia = useUiStore((state) => state.openMedia);
   const exists = useLibraryStore((state) =>
@@ -80,6 +88,13 @@ function MediaCard({ media }: { media: Media }) {
             ? (media.chapters ? `${media.chapters} caps` : 'Em publicação')
             : (media.episodes ? `${media.episodes} eps` : 'Em exibição')}
         </p>
+        {reasons && reasons.length > 0 && (
+          <div className="recommendation-reasons">
+            {reasons.slice(0, 2).map((reason) => (
+              <span key={reason}><Sparkles size={11} /> {reason}</span>
+            ))}
+          </div>
+        )}
         <button
           className={exists ? 'button added' : 'button'}
           onClick={(event) => {
@@ -247,11 +262,13 @@ function DiscoveryShelf({
   title,
   description,
   items,
+  showReasons = false,
 }: {
   eyebrow: string;
   title: string;
   description?: string;
-  items: Media[];
+  items: DiscoverMedia[];
+  showReasons?: boolean;
 }) {
   if (!items.length) return null;
 
@@ -266,7 +283,11 @@ function DiscoveryShelf({
       </div>
       <div className="media-grid">
         {items.slice(0, 6).map((media) => (
-          <MediaCard key={`${media.type}-${media.malId}`} media={media} />
+          <MediaCard
+            key={`${media.type}-${media.malId}`}
+            media={media}
+            reasons={showReasons ? media.recommendationReasons : undefined}
+          />
         ))}
       </div>
     </section>
@@ -380,6 +401,7 @@ function HomePage() {
               ? 'Ranking local que considera seus gêneros, notas, status da biblioteca, qualidade pública, popularidade e recência.'
               : 'Enquanto sua biblioteca está vazia, o AnimeDesk combina qualidade, popularidade e recência.'}
             items={discover.data.recommendations}
+            showReasons
           />
 
           <DiscoveryShelf

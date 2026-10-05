@@ -23,6 +23,7 @@ A primeira base funcional já inclui:
 - Sistema de descoberta 0.2.0 com Kitsu: tendências, temporada, populares, melhor avaliados, próximas estreias e recomendações locais.
 - Todo item de descoberta precisa ser resolvido para MAL ID real via Kitsu mappings antes de entrar no app.
 - Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
+- Explicações de recomendação 0.2.2: os cards personalizados mostram fatores como afinidade de gêneros, título semelhante da sua biblioteca, nota pública, popularidade e recência.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
 - Tela de detalhes para anime e mangá com sinopse, gêneros, nota, ranking, estúdio/autores, progresso e relações entre obras.
 - Navegação entre prequelas, sequências e outras relações diretamente pelos detalhes.
@@ -170,8 +171,8 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Adicionar explicação “por que foi recomendado” e afinidade por estúdio.
-2. Criar normalizador completo de IDs/títulos externos.
+1. Criar normalizador completo de IDs/títulos externos.
+2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
 3. Persistir cache de descoberta, regras de alertas e agenda no SQLite.
 4. Adicionar testes automatizados do enriquecimento e da recomendação.
 5. Criar histórico e estatísticas detalhadas.

@@ -20,6 +20,7 @@ export interface DiscoverMedia extends Media {
   startDate?: string | null;
   nextRelease?: string | null;
   recommendationScore?: number;
+  recommendationReasons?: string[];
 }
 
 export interface DiscoverProvider {
@@ -427,6 +428,98 @@ function recommendationScore(
   return personalized;
 }
 
+function bestReferenceTitle(
+  item: DiscoverMedia,
+  library: LibraryEntry[],
+): string | null {
+  const itemGenres = new Set(item.genres.map(normalizeGenreName));
+  if (!itemGenres.size) return null;
+
+  let best: { title: string; score: number } | null = null;
+
+  for (const entry of library) {
+    if (entry.media.type !== 'anime') continue;
+    if (entry.status === 'planned' || entry.status === 'dropped') continue;
+    if (entry.media.malId === item.malId) continue;
+
+    const overlap = entry.media.genres
+      .map(normalizeGenreName)
+      .filter((genre) => itemGenres.has(genre)).length;
+
+    if (!overlap) continue;
+
+    const score =
+      overlap * 10 +
+      (entry.score ?? 0) +
+      Math.max(0, libraryStatusWeight(entry)) * 2;
+
+    if (!best || score > best.score) {
+      best = {
+        title: entry.media.titleEnglish || entry.media.title,
+        score,
+      };
+    }
+  }
+
+  return best?.title ?? null;
+}
+
+function buildRecommendationReasons(
+  item: DiscoverMedia,
+  genreProfile: Map<string, number>,
+  library: LibraryEntry[],
+): string[] {
+  const reasons: string[] = [];
+
+  const matchingGenres = item.genres
+    .map((genre) => ({
+      label: genre,
+      weight: genreProfile.get(normalizeGenreName(genre)) ?? 0,
+    }))
+    .filter((genre) => genre.weight > 0.2)
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, 2)
+    .map((genre) => genre.label);
+
+  if (matchingGenres.length === 1) {
+    reasons.push(`Combina com seu interesse em ${matchingGenres[0]}`);
+  } else if (matchingGenres.length >= 2) {
+    reasons.push(`Combina com ${matchingGenres[0]} + ${matchingGenres[1]}`);
+  }
+
+  const referenceTitle = bestReferenceTitle(item, library);
+  if (referenceTitle) {
+    reasons.push(`Tem afinidade com ${referenceTitle}`);
+  }
+
+  if (item.score && item.score >= 8.5) {
+    reasons.push(`Nota pública alta: ${item.score.toFixed(1)}/10`);
+  }
+
+  if (
+    (item.popularityRank && item.popularityRank <= 500) ||
+    (item.userCount && item.userCount >= 15_000)
+  ) {
+    reasons.push('Muito popular na comunidade');
+  }
+
+  if (item.startDate) {
+    const start = new Date(item.startDate).getTime();
+    const daysFromNow = (start - Date.now()) / 86_400_000;
+    if (daysFromNow > 0 && daysFromNow <= 180) {
+      reasons.push('Estreia próxima');
+    } else if (daysFromNow <= 0 && daysFromNow >= -550) {
+      reasons.push('Lançamento recente');
+    }
+  }
+
+  if (!reasons.length) {
+    reasons.push('Boa combinação de qualidade e relevância atual');
+  }
+
+  return reasons.slice(0, 3);
+}
+
 function rankRecommendations(
   candidates: DiscoverMedia[],
   library: LibraryEntry[],
@@ -442,6 +535,7 @@ function rankRecommendations(
     .map((item) => ({
       ...item,
       recommendationScore: recommendationScore(item, genreProfile, libraryById),
+      recommendationReasons: buildRecommendationReasons(item, genreProfile, library),
     }))
     .filter((item) => (item.recommendationScore ?? -100) > -50)
     .sort((a, b) => (b.recommendationScore ?? 0) - (a.recommendationScore ?? 0))
