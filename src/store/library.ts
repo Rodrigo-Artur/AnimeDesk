@@ -29,6 +29,7 @@ type LibraryStore = {
   setStatus: (malId: number, type: Media['type'], status: LibraryStatus) => void;
   incrementProgress: (malId: number, type: Media['type']) => void;
   cacheCover: (malId: number, type: Media['type']) => Promise<boolean>;
+  applyEnrichment: (media: Media) => Promise<boolean>;
   importEntries: (entries: LibraryEntry[]) => Promise<LibraryImportReport>;
 };
 
@@ -63,6 +64,28 @@ function mergeImportedEntry(existing: LibraryEntry, incoming: LibraryEntry): Lib
     progress: incoming.progress,
     score: incoming.score,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+function isLocalCover(url?: string): boolean {
+  return Boolean(url && (url.startsWith('asset:') || url.includes('asset.localhost')));
+}
+
+function mergeEnrichedMedia(existing: Media, incoming: Media): Media {
+  return {
+    ...existing,
+    title: existing.title || incoming.title,
+    titleEnglish: incoming.titleEnglish ?? existing.titleEnglish,
+    imageUrl: isLocalCover(existing.imageUrl)
+      ? existing.imageUrl
+      : incoming.imageUrl ?? existing.imageUrl,
+    score: incoming.score ?? existing.score,
+    episodes: incoming.episodes ?? existing.episodes,
+    chapters: incoming.chapters ?? existing.chapters,
+    status: incoming.status ?? existing.status,
+    synopsis: incoming.synopsis ?? existing.synopsis,
+    genres: incoming.genres.length ? incoming.genres : existing.genres,
+    year: incoming.year ?? existing.year,
   };
 }
 
@@ -230,6 +253,37 @@ export const useLibraryStore = create<LibraryStore>()(
           return true;
         } catch (error) {
           console.error('Falha ao cachear capa localmente:', error);
+          return false;
+        }
+      },
+
+      applyEnrichment: async (media) => {
+        const current = get().entries.find(
+          (entry) => entry.media.malId === media.malId && entry.media.type === media.type,
+        );
+        if (!current) return false;
+
+        const updated: LibraryEntry = {
+          ...current,
+          media: mergeEnrichedMedia(current.media, media),
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          if (isTauriRuntime()) {
+            await saveNativeEntry(updated);
+          }
+
+          set((state) => ({
+            entries: state.entries.map((entry) =>
+              entry.media.malId === media.malId && entry.media.type === media.type
+                ? updated
+                : entry,
+            ),
+          }));
+          return true;
+        } catch (error) {
+          console.error('Falha ao aplicar enriquecimento:', error);
           return false;
         }
       },

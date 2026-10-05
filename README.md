@@ -18,6 +18,8 @@ A primeira base funcional já inclui:
 - Busca real de animes e mangás diretamente no MyAnimeList pelo backend Rust no Tauri; o cliente usa TLS nativo do Windows. Jikan permanece para recursos complementares/modo web quando acessível.
 - Cache local de capas: ao adicionar pelo Explorar, o Tauri baixa a imagem para `AppData\\com.animedesk.app\\covers` e passa a usar a cópia offline.
 - Importação de biblioteca do MyAnimeList por `.xml` ou `.xml.gz`, com preview, merge por MAL ID, status, progresso, nota e proteção contra duplicados.
+- Enriquecimento automático pós-importação: resolve MAL ID → Kitsu em lotes de 20, preenche capa/sinopse/gêneros/ano/score público/totais quando disponíveis, preserva dados pessoais e baixa capas offline.
+- Fila de enriquecimento com progresso, cancelamento, falhas por item, retry e execução em segundo plano mesmo ao trocar de tela.
 - Sistema de descoberta 0.2.0 com Kitsu: tendências, temporada, populares, melhor avaliados, próximas estreias e recomendações locais.
 - Todo item de descoberta precisa ser resolvido para MAL ID real via Kitsu mappings antes de entrar no app.
 - Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
@@ -168,10 +170,10 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Enriquecer automaticamente itens importados do MyAnimeList com metadados/capas.
+1. Adicionar explicação “por que foi recomendado” e afinidade por estúdio.
 2. Criar normalizador completo de IDs/títulos externos.
 3. Persistir cache de descoberta, regras de alertas e agenda no SQLite.
-4. Adicionar explicação “por que foi recomendado” e afinidade por estúdio.
+4. Adicionar testes automatizados do enriquecimento e da recomendação.
 5. Criar histórico e estatísticas detalhadas.
 6. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
 7. Implementar importador de histórico Netflix.

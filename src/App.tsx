@@ -42,6 +42,7 @@ import {
 import { plannedStreamingProviders } from './services/providers';
 import { startReleaseWatcher } from './services/releaseWatcher';
 import { getWeeklySchedule } from './services/schedule';
+import { useEnrichmentStore } from './store/enrichment';
 import { useLibraryStore } from './store/library';
 import { useUiStore } from './store/ui';
 import type { Media } from './types/media';
@@ -686,7 +687,19 @@ function AgendaPage() {
 }
 
 function IntegrationsPage() {
+  const entries = useLibraryStore((state) => state.entries);
   const importEntries = useLibraryStore((state) => state.importEntries);
+  const enrichmentStatus = useEnrichmentStore((state) => state.status);
+  const enrichmentTotal = useEnrichmentStore((state) => state.total);
+  const enrichmentProcessed = useEnrichmentStore((state) => state.processed);
+  const enrichmentCount = useEnrichmentStore((state) => state.enriched);
+  const enrichmentCovers = useEnrichmentStore((state) => state.coversCached);
+  const enrichmentFailures = useEnrichmentStore((state) => state.failures);
+  const enrichmentCurrent = useEnrichmentStore((state) => state.currentTitle);
+  const startEnrichment = useEnrichmentStore((state) => state.start);
+  const cancelEnrichment = useEnrichmentStore((state) => state.cancel);
+  const retryEnrichment = useEnrichmentStore((state) => state.retryFailed);
+  const resetEnrichment = useEnrichmentStore((state) => state.reset);
   const [malPreview, setMalPreview] = useState<MalImportPreview | null>(null);
   const [malFileName, setMalFileName] = useState('');
   const [malImporting, setMalImporting] = useState(false);
@@ -720,9 +733,11 @@ function IntegrationsPage() {
       const result = await importEntries(malPreview.entries);
       const skipped = malPreview.skipped ? ` · ${malPreview.skipped} ignorado(s) no XML` : '';
       setMalMessage(
-        `Importação concluída: ${result.added} novo(s), ${result.updated} atualizado(s), ${result.unchanged} sem mudanças${skipped}.`,
+        `Importação concluída: ${result.added} novo(s), ${result.updated} atualizado(s), ${result.unchanged} sem mudanças${skipped}. Enriquecimento iniciado em segundo plano.`,
       );
+      const importedEntries = malPreview.entries;
       setMalPreview(null);
+      void startEnrichment(importedEntries);
     } catch (error) {
       setMalMessage(error instanceof Error ? error.message : 'A importação falhou ao salvar a biblioteca.');
     } finally {
@@ -740,7 +755,7 @@ function IntegrationsPage() {
           <div>
             <span>IMPORTAR BIBLIOTECA</span>
             <h2>Trazer lista do MyAnimeList</h2>
-            <p>Selecione o arquivo exportado pelo MAL em formato .xml ou .xml.gz. O AnimeDesk usa o MAL ID para atualizar progresso, status e nota sem duplicar títulos.</p>
+            <p>Selecione o arquivo exportado pelo MAL em formato .xml ou .xml.gz. Depois de salvar progresso, status e nota, o AnimeDesk enriquece os títulos em segundo plano com metadados e capas offline.</p>
           </div>
           <label className="button secondary mal-file-button">
             <Upload size={15} /> Selecionar arquivo
@@ -772,17 +787,106 @@ function IntegrationsPage() {
               <strong>{malPreview.username || '—'}</strong>
               <span>usuário no arquivo</span>
             </div>
-            <button className="button" disabled={malImporting} onClick={() => void confirmMalImport()}>
+            <button
+              className="button"
+              disabled={malImporting || enrichmentStatus === 'running'}
+              onClick={() => void confirmMalImport()}
+            >
               {malImporting ? 'Importando…' : `Importar ${malPreview.entries.length} itens`}
             </button>
           </div>
         )}
 
         {malMessage && <div className="mal-import-message">{malMessage}</div>}
+
+        {(entries.length > 0 || enrichmentStatus !== 'idle') && (
+          <div className="enrichment-panel">
+            <div className="enrichment-head">
+              <div>
+                <span>ENRIQUECIMENTO AUTOMÁTICO</span>
+                <h3>Metadados e capas da biblioteca</h3>
+                <p>
+                  Resolve MAL ID → Kitsu em lotes, preserva seu progresso/nota/status e salva capas localmente.
+                </p>
+              </div>
+              <div className="enrichment-actions">
+                {enrichmentStatus === 'running' ? (
+                  <button className="button secondary" onClick={cancelEnrichment}>Cancelar</button>
+                ) : (
+                  <>
+                    {enrichmentFailures.length > 0 && (
+                      <button className="button secondary" onClick={() => void retryEnrichment()}>
+                        Tentar falhas novamente
+                      </button>
+                    )}
+                    <button
+                      className="button"
+                      disabled={!entries.length}
+                      onClick={() => void startEnrichment(entries)}
+                    >
+                      {enrichmentStatus === 'completed' ? 'Enriquecer novamente' : 'Enriquecer biblioteca'}
+                    </button>
+                    {enrichmentStatus !== 'idle' && (
+                      <button className="button secondary" onClick={resetEnrichment}>Limpar status</button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {enrichmentStatus !== 'idle' && (
+              <div className="enrichment-body">
+                <div className="enrichment-progress-row">
+                  <strong>
+                    {enrichmentStatus === 'running'
+                      ? `Processando ${enrichmentProcessed} de ${enrichmentTotal}`
+                      : enrichmentStatus === 'completed'
+                        ? `Concluído: ${enrichmentProcessed} de ${enrichmentTotal}`
+                        : `Cancelado em ${enrichmentProcessed} de ${enrichmentTotal}`}
+                  </strong>
+                  <span>{enrichmentTotal ? Math.round((enrichmentProcessed / enrichmentTotal) * 100) : 0}%</span>
+                </div>
+                <div className="enrichment-progress">
+                  <span style={{
+                    width: `${enrichmentTotal ? Math.min(100, (enrichmentProcessed / enrichmentTotal) * 100) : 0}%`,
+                  }} />
+                </div>
+
+                {enrichmentCurrent && (
+                  <div className="enrichment-current">Agora: {enrichmentCurrent}</div>
+                )}
+
+                <div className="enrichment-stats">
+                  <div><strong>{enrichmentCount}</strong><span>enriquecidos</span></div>
+                  <div><strong>{enrichmentCovers}</strong><span>capas offline</span></div>
+                  <div><strong>{enrichmentFailures.length}</strong><span>falhas</span></div>
+                </div>
+
+                {enrichmentFailures.length > 0 && (
+                  <details className="enrichment-errors">
+                    <summary>Ver falhas ({enrichmentFailures.length})</summary>
+                    <div>
+                      {enrichmentFailures.slice(0, 30).map((failure) => (
+                        <p key={`${failure.type}-${failure.malId}`}>
+                          <strong>{failure.title}</strong>
+                          <span>{failure.reason}</span>
+                        </p>
+                      ))}
+                      {enrichmentFailures.length > 30 && (
+                        <small>+ {enrichmentFailures.length - 30} falha(s) não exibida(s).</small>
+                      )}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="integration-grid">
-        <div className="integration-card live"><div className="service-icon">MAL</div><div><h3>MyAnimeList / Jikan</h3><p>Catálogo, detalhes e importação de biblioteca por XML/XML.GZ.</p></div><span>ATIVO</span></div>
+        <div className="integration-card live"><div className="service-icon">MAL</div><div><h3>MyAnimeList</h3><p>Busca direta no desktop, identidade MAL ID e importação da biblioteca por XML/XML.GZ.</p></div><span>ATIVO</span></div>
+        <div className="integration-card live"><div className="service-icon">KI</div><div><h3>Kitsu</h3><p>Descoberta e enriquecimento automático de metadados/capas resolvidos a partir do MAL ID.</p></div><span>ATIVO</span></div>
         <div className="integration-card live"><div className="service-icon">AS</div><div><h3>AnimeSchedule</h3><p>Agenda precisa quando VITE_ANIMESCHEDULE_TOKEN estiver configurado; Jikan assume automaticamente sem token.</p></div><span>OPCIONAL</span></div>
         <div className="integration-card live"><div className="service-icon">DB</div><div><h3>SQLite local</h3><p>Biblioteca, progresso, histórico e migrations nativas pelo Tauri.</p></div><span>ATIVO</span></div>
         <div className="integration-card live"><div className="service-icon">WIN</div><div><h3>Windows</h3><p>System tray, autostart e notificações de lançamentos.</p></div><span>ATIVO</span></div>

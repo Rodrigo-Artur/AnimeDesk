@@ -132,6 +132,124 @@ async fn fetch_kitsu_discover(
 }
 
 #[tauri::command]
+async fn enrich_kitsu_by_mal_ids(
+  media_type: String,
+  mal_ids: Vec<i64>,
+) -> Result<serde_json::Value, String> {
+  if media_type != "anime" && media_type != "manga" {
+    return Err("Tipo de mídia inválido para enriquecimento.".into());
+  }
+
+  if mal_ids.is_empty() {
+    return Ok(serde_json::json!({
+      "mappings": [],
+      "media": { "data": [], "included": [] }
+    }));
+  }
+
+  if mal_ids.len() > 20 {
+    return Err("O enriquecimento aceita no máximo 20 IDs por lote.".into());
+  }
+
+  if mal_ids.iter().any(|id| *id <= 0) {
+    return Err("A lista contém MAL ID inválido.".into());
+  }
+
+  let client = kitsu_client().await?;
+  let external_site = if media_type == "anime" {
+    "myanimelist/anime"
+  } else {
+    "myanimelist/manga"
+  };
+  let ids_csv = mal_ids
+    .iter()
+    .map(i64::to_string)
+    .collect::<Vec<_>>()
+    .join(",");
+
+  let mappings_response = client
+    .get("https://kitsu.io/api/edge/mappings")
+    .query(&[
+      ("filter[externalSite]", external_site),
+      ("filter[externalId]", ids_csv.as_str()),
+      ("page[limit]", "20"),
+      ("include", "item"),
+    ])
+    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.2.1")
+    .send()
+    .await
+    .map_err(|error| format!("Falha ao resolver MAL IDs no Kitsu: {error}"))?;
+
+  if !mappings_response.status().is_success() {
+    return Err(format!(
+      "Kitsu mappings respondeu HTTP {}.",
+      mappings_response.status()
+    ));
+  }
+
+  let mappings_json = mappings_response
+    .json::<serde_json::Value>()
+    .await
+    .map_err(|error| format!("Resposta inválida do Kitsu mappings: {error}"))?;
+
+  let mappings = mappings_json
+    .get("data")
+    .and_then(|value| value.as_array())
+    .cloned()
+    .unwrap_or_default();
+
+  let kitsu_ids: Vec<String> = mappings
+    .iter()
+    .filter_map(|mapping| {
+      mapping
+        .get("relationships")
+        .and_then(|value| value.get("item"))
+        .and_then(|value| value.get("data"))
+        .and_then(|value| value.get("id"))
+        .and_then(|value| value.as_str())
+        .map(str::to_owned)
+    })
+    .collect();
+
+  if kitsu_ids.is_empty() {
+    return Ok(serde_json::json!({
+      "mappings": mappings,
+      "media": { "data": [], "included": [] }
+    }));
+  }
+
+  let endpoint = format!("https://kitsu.io/api/edge/{media_type}");
+  let media_response = client
+    .get(endpoint)
+    .query(&[
+      ("filter[id]", kitsu_ids.join(",")),
+      ("page[limit]", "20".into()),
+      ("include", "categories".into()),
+    ])
+    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.2.1")
+    .send()
+    .await
+    .map_err(|error| format!("Falha ao buscar metadados Kitsu: {error}"))?;
+
+  if !media_response.status().is_success() {
+    return Err(format!(
+      "Kitsu metadados respondeu HTTP {}.",
+      media_response.status()
+    ));
+  }
+
+  let media_json = media_response
+    .json::<serde_json::Value>()
+    .await
+    .map_err(|error| format!("Resposta inválida dos metadados Kitsu: {error}"))?;
+
+  Ok(serde_json::json!({
+    "mappings": mappings,
+    "media": media_json
+  }))
+}
+
+#[tauri::command]
 async fn search_myanimelist(
   media_type: String,
   keyword: String,
@@ -355,7 +473,12 @@ pub fn run() {
 
       Ok(())
     })
-    .invoke_handler(tauri::generate_handler![cache_cover, search_myanimelist, fetch_kitsu_discover])
+    .invoke_handler(tauri::generate_handler![
+      cache_cover,
+      search_myanimelist,
+      fetch_kitsu_discover,
+      enrich_kitsu_by_mal_ids
+    ])
     .on_window_event(|window, event| {
       if let WindowEvent::CloseRequested { api, .. } = event {
         let _ = window.hide();
