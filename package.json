@@ -1,0 +1,67 @@
+{
+  "name": "animedesk",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Desktop anime and manga tracker with schedules, alerts and streaming integrations.",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "desktop:dev": "powershell -ExecutionPolicy Bypass -File scripts\\tauri.ps1 dev",
+    "desktop:dist": "powershell -ExecutionPolicy Bypass -File scripts\\tauri.ps1 build",
+    "electron:dev": "concurrently -k -s first \"vite --host 127.0.0.1 --port 5190 --strictPort\" \"wait-on http://127.0.0.1:5190 && electron . --dev\"",
+    "electron:run": "npm run build && electron .",
+    "electron:pack": "npm run build && electron-builder --dir",
+    "electron:dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.104.1",
+    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-autostart": "^2.7.0",
+    "@tauri-apps/plugin-notification": "^2.5.1",
+    "@tauri-apps/plugin-sql": "^2.5.0",
+    "dayjs": "^1.11.23",
+    "lucide-react": "^1.52.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.18.4",
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "wait-on": "^9.5.1"
+  },
+  "build": {
+    "appId": "com.animedesk.app",
+    "productName": "AnimeDesk",
+    "directories": {
+      "output": "D:\\AnimeDeskBuild"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "AnimeDesk-Setup.exe"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+# Dependencies / builds
+node_modules/
+dist/
+dist-ssr/
+coverage/
+src-tauri/target/
+target/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases and user data
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.bak
+covers/
+data/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local generated/package outputs
+release/
+out/
+*.local
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

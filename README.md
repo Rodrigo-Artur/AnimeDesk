@@ -1,0 +1,179 @@
+# AnimeDesk
+
+Aplicativo desktop em desenvolvimento para centralizar biblioteca de animes e mangás, progresso, agenda de lançamentos, alertas e integrações com trackers/streamings.
+
+## Estado atual
+
+A primeira base funcional já inclui:
+
+- Tauri 2 + Rust + React + TypeScript + Vite como shell principal.
+- Electron preservado temporariamente apenas como fallback.
+- Janela desktop nativa validada no Windows.
+- SQLite nativo com migrações automáticas e fallback localStorage no navegador.
+- Migração automática do conteúdo localStorage para SQLite na primeira execução Tauri.
+- System tray: fechar a janela oculta o app; clique no tray restaura.
+- Autostart configurável nas preferências.
+- Notificações nativas do Windows com teste pela interface.
+- Dashboard com estatísticas locais.
+- Busca real de animes e mangás diretamente no MyAnimeList pelo backend Rust no Tauri; o cliente usa TLS nativo do Windows. Jikan permanece para recursos complementares/modo web quando acessível.
+- Cache local de capas: ao adicionar pelo Explorar, o Tauri baixa a imagem para `AppData\\com.animedesk.app\\covers` e passa a usar a cópia offline.
+- Importação de biblioteca do MyAnimeList por `.xml` ou `.xml.gz`, com preview, merge por MAL ID, status, progresso, nota e proteção contra duplicados.
+- Sistema de descoberta 0.2.0 com Kitsu: tendências, temporada, populares, melhor avaliados, próximas estreias e recomendações locais.
+- Todo item de descoberta precisa ser resolvido para MAL ID real via Kitsu mappings antes de entrar no app.
+- Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
+- Biblioteca com status, progresso e histórico manual de episódios/capítulos.
+- Tela de detalhes para anime e mangá com sinopse, gêneros, nota, ranking, estúdio/autores, progresso e relações entre obras.
+- Navegação entre prequelas, sequências e outras relações diretamente pelos detalhes.
+- Agenda semanal funcional: AnimeSchedule quando há token e fallback automático pelo Jikan.
+- Alertas automáticos de lançamentos para animes da biblioteca com antecedência de 10, 30 ou 60 minutos.
+- Arquitetura de providers para serviços externos.
+- Providers planejados para Crunchyroll, Netflix, Prime Video, Disney+ e Max.
+
+## Executar
+
+O script carrega automaticamente o MSVC e o Rust instalados no PC:
+
+```powershell
+cd "F:\Backup\documentos linux\Coditech\Tarefas\AnimeDesk"
+npm install
+npm run desktop:dev
+```
+
+Gerar o instalador Tauri/NSIS:
+
+```powershell
+npm run desktop:dist
+```
+
+Build apenas do frontend:
+
+```powershell
+npm run build
+```
+
+Fallback Electron, caso seja necessário durante a migração:
+
+```powershell
+npm run electron:dev
+```
+
+Toolchains locais:
+
+- Rust/Cargo: `D:\DevTools\Rust`
+- Visual Studio Build Tools: `D:\VSBuildTools`
+- Target/cache de build do Tauri: `D:\AnimeDeskTauriBuild\target`
+
+## Dados
+
+O modelo SQLite planejado contém:
+
+- `media`
+- `external_media_ids`
+- `library_entries`
+- `releases`
+- `watch_history`
+- `notifications`
+
+No Tauri, a aplicação usa SQLite como persistência principal. No navegador, usa localStorage como fallback. Na primeira execução nativa, uma biblioteca que exista no localStorage é migrada automaticamente para SQLite.
+
+## Importar do MyAnimeList
+
+1. Exporte sua lista pelo MyAnimeList.
+2. Abra **Integrações** no AnimeDesk.
+3. Em **Trazer lista do MyAnimeList**, escolha o arquivo `.xml` ou `.xml.gz`.
+4. Confira a prévia com quantidade de animes/mangás e confirme a importação.
+
+A importação usa a chave composta `tipo + MAL ID`, então anime e mangá com o mesmo número de ID não colidem. Títulos já existentes recebem progresso/status/nota do arquivo, preservando metadados locais mais ricos quando disponíveis.
+
+## Providers
+
+### Ativo
+
+**MyAnimeList direto**
+- Busca de anime/mangá no runtime Tauri pelo backend Rust.
+- Mantém MAL ID como identidade canônica atual.
+- Não exige login para a busca utilizada no app.
+
+**Kitsu**
+- Provider principal da Home/Descobrir.
+- Trending, temporada, popularidade, top rated, current e upcoming.
+- Categories para afinidade de gêneros.
+- Mappings Kitsu → MAL ID.
+- Cache local de descoberta como fallback temporário.
+
+**Jikan**
+- Provider complementar para detalhes/relations e modo web quando acessível.
+- Não é mais dependência crítica da Home.
+- Na rede testada em 05/10/2026, api.jikan.moe apresentou timeout.
+
+**AnimeSchedule**
+- Agenda semanal precisa de episódios legendados.
+- Horário convertido para `America/Sao_Paulo`.
+- Números de episódios e alertas.
+- Opcional: sem token, a agenda usa automaticamente os horários de exibição do Jikan como fallback.
+
+Copie `.env.example` para `.env` e configure `VITE_ANIMESCHEDULE_TOKEN` para ativar o provider principal de agenda.
+
+### Planejados
+
+**Crunchyroll**
+- Watchlist.
+- Histórico.
+- Continue assistindo.
+- Progresso.
+- Inicialmente somente leitura.
+
+**Netflix**
+- Importação do histórico oficial CSV.
+- Normalização dos títulos contra o catálogo local.
+
+**Prime Video**
+- Importação de histórico/exportação local.
+
+**Disney+ / Max**
+- Providers experimentais e isolados para não comprometer o restante do app.
+
+## Arquitetura
+
+```
+UI React
+   |
+Stores / domínio
+   |
++-- Catalog / Identity
+|      +-- MyAnimeList direto
+|      +-- Jikan (complementar)
+|
++-- DiscoverProvider
+|      +-- Kitsu
+|      +-- cache local
+|
++-- ScheduleProvider
+|      +-- AnimeSchedule
+|
++-- StreamingProvider
+|      +-- Crunchyroll
+|      +-- Netflix
+|      +-- Prime Video
+|
++-- Repository
+       +-- SQLite
+```
+
+Cada serviço externo deve permanecer isolado. Se um endpoint privado mudar, apenas aquele provider deve falhar.
+
+## Migrações SQLite
+
+A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. Não altere migrations já aplicadas: mudanças futuras do banco devem ser adicionadas como `0002_...`, `0003_...` etc. Isso evita incompatibilidade de checksum em instalações existentes.
+
+## Próximas etapas
+
+1. Enriquecer automaticamente itens importados do MyAnimeList com metadados/capas.
+2. Criar normalizador completo de IDs/títulos externos.
+3. Persistir cache de descoberta, regras de alertas e agenda no SQLite.
+4. Adicionar explicação “por que foi recomendado” e afinidade por estúdio.
+5. Criar histórico e estatísticas detalhadas.
+6. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
+7. Implementar importador de histórico Netflix.
+8. Implementar CrunchyrollProvider somente leitura.
+9. Polir ícone, CSP, identifier, instalador e atualização automática.

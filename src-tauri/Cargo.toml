@@ -1,0 +1,29 @@
+[package]
+name = "animedesk"
+version = "0.2.0"
+description = "Desktop anime and manga tracker with schedules, alerts and streaming integrations."
+authors = ["AnimeDesk"]
+license = ""
+repository = ""
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "animedesk_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.1", features = ["protocol-asset", "tray-icon", "image-ico"] }
+tauri-plugin-log = "2"
+tauri-plugin-sql = { version = "2.5.0", features = ["sqlite"] }
+tauri-plugin-notification = "2.5.1"
+tauri-plugin-autostart = "2.7.0"
+reqwest = { version = "0.12", features = ["json"] }
