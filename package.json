@@ -1,7 +1,7 @@
 {
   "name": "animedesk",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Desktop anime and manga tracker with schedules, alerts and streaming integrations.",
   "main": "electron/main.cjs",
   "type": "module",
@@ -16,7 +16,9 @@
     "electron:dev": "concurrently -k -s first \"vite --host 127.0.0.1 --port 5190 --strictPort\" \"wait-on http://127.0.0.1:5190 && electron . --dev\"",
     "electron:run": "npm run build && electron .",
     "electron:pack": "npm run build && electron-builder --dir",
-    "electron:dist": "npm run build && electron-builder"
+    "electron:dist": "npm run build && electron-builder",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.104.1",
@@ -41,9 +43,11 @@
     "concurrently": "^10.0.5",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
+    "happy-dom": "^20.14.5",
     "oxlint": "^1.81.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
+    "vitest": "^5.0.3",
     "wait-on": "^9.5.1"
   },
   "build": {

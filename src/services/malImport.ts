@@ -10,7 +10,7 @@ export type MalImportPreview = {
 
 function text(node: Element, ...names: string[]): string {
   for (const name of names) {
-    const value = node.querySelector(name)?.textContent?.trim();
+    const value = node.getElementsByTagName(name)[0]?.textContent?.trim();
     if (value) return value;
   }
   return '';
@@ -129,13 +129,13 @@ export async function readMalExportFile(file: File): Promise<string> {
 
 export function parseMalExportXml(xml: string): MalImportPreview {
   const documentXml = new DOMParser().parseFromString(xml, 'application/xml');
-  const parseError = documentXml.querySelector('parsererror');
+  const parseError = documentXml.getElementsByTagName('parsererror')[0];
   if (parseError) {
     throw new Error('O arquivo XML não pôde ser lido. Verifique se ele foi exportado pelo MyAnimeList.');
   }
 
-  const animeNodes = Array.from(documentXml.querySelectorAll('myanimelist > anime, anime'));
-  const mangaNodes = Array.from(documentXml.querySelectorAll('myanimelist > manga, manga'));
+  const animeNodes = Array.from(documentXml.getElementsByTagName('anime'));
+  const mangaNodes = Array.from(documentXml.getElementsByTagName('manga'));
 
   const entries: LibraryEntry[] = [];
   let skipped = 0;
@@ -158,8 +158,7 @@ export function parseMalExportXml(xml: string): MalImportPreview {
   }
 
   const username =
-    documentXml.querySelector('myinfo > user_name')?.textContent?.trim() ||
-    documentXml.querySelector('user_name')?.textContent?.trim() ||
+    documentXml.getElementsByTagName('user_name')[0]?.textContent?.trim() ||
     undefined;
 
   const finalEntries = Array.from(deduped.values());

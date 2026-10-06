@@ -27,6 +27,8 @@ A primeira base funcional já inclui:
 - Normalizador de IDs externos 0.3.0: cada mídia pode carregar vários IDs (myanimelist/anime, myanimelist/manga, kitsu, tmdb, crunchyroll etc.), persistidos em external_media_ids e resolvidos de volta para a mídia local.
 - Persistência de estado 0.3.1: preferências de alertas, cache de descoberta, cache semanal da agenda, marcadores de notificações e timestamps de last-sync usam SQLite no Tauri, com migração automática do localStorage legado e fallback web.
 - Releases da biblioteca encontrados pela Agenda também são normalizados na tabela `releases`, com deduplicação explícita.
+- Testes automatizados 0.3.2 com Vitest + happy-dom: normalizador de IDs, parser MAL, enriquecimento Kitsu, recomendações e Agenda; 14 testes validados.
+- Parser XML do MAL endurecido para usar APIs XML nativas (`getElementsByTagName`) em vez de depender de seletores CSS.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
 - Tela de detalhes para anime e mangá com sinopse, gêneros, nota, ranking, estúdio/autores, progresso e relações entre obras.
 - Navegação entre prequelas, sequências e outras relações diretamente pelos detalhes.
@@ -55,6 +57,18 @@ Build apenas do frontend:
 
 ```powershell
 npm run build
+```
+
+Executar a suíte automatizada uma vez:
+
+```powershell
+npm run test:run
+```
+
+Modo watch para desenvolvimento:
+
+```powershell
+npm test
 ```
 
 Fallback Electron, caso seja necessário durante a migração:
@@ -175,8 +189,8 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Adicionar testes automatizados do normalizador, enriquecimento, recomendador, parser MAL e agenda.
-2. Criar página de histórico e estatísticas detalhadas.
+1. Criar página de histórico e estatísticas detalhadas.
+2. Expandir testes para store de biblioteca, cache expirado e conflitos de IDs.
 3. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
 4. Expandir o normalizador com mappings verificados de Crunchyroll/TMDB/outros providers.
 5. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
