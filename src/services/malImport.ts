@@ -67,6 +67,9 @@ function parseAnime(node: Element): LibraryEntry | null {
     status: text(node, 'series_status') || undefined,
     genres: [],
     year: yearFromDate(text(node, 'series_start')),
+    externalIds: {
+      'myanimelist/anime': String(malId),
+    },
   };
 
   return {
@@ -98,6 +101,9 @@ function parseManga(node: Element): LibraryEntry | null {
     status: text(node, 'manga_status', 'series_status') || undefined,
     genres: [],
     year: yearFromDate(text(node, 'manga_start', 'series_start')),
+    externalIds: {
+      'myanimelist/manga': String(malId),
+    },
   };
 
   return {

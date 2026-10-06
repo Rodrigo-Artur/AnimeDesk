@@ -15,6 +15,7 @@ export interface Media {
   synopsis?: string;
   genres: string[];
   year?: number | null;
+  externalIds?: Record<string, string>;
 }
 
 export interface MediaRelationEntry {

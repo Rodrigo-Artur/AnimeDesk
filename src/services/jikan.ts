@@ -59,6 +59,9 @@ async function searchMyAnimeListDirect(
     status: item.payload?.status,
     genres: [],
     year: item.payload?.start_year ?? null,
+    externalIds: {
+      [`myanimelist/${type}`]: String(item.id),
+    },
   }));
 }
 
@@ -108,6 +111,9 @@ function animeToMedia(item: JikanAnime): Media {
     synopsis: item.synopsis,
     genres: item.genres?.map((genre) => genre.name) ?? [],
     year: item.year,
+    externalIds: {
+      'myanimelist/anime': String(item.mal_id),
+    },
   };
 }
 
@@ -125,6 +131,9 @@ function mangaToMedia(item: JikanManga): Media {
     synopsis: item.synopsis,
     genres: item.genres?.map((genre) => genre.name) ?? [],
     year: item.published?.prop?.from?.year,
+    externalIds: {
+      'myanimelist/manga': String(item.mal_id),
+    },
   };
 }
 
@@ -215,6 +224,11 @@ export async function getMediaDetails(media: Media): Promise<MediaDetails> {
 
   return {
     ...base,
+    externalIds: {
+      ...(base.externalIds ?? {}),
+      ...(media.externalIds ?? {}),
+      [`myanimelist/${media.type}`]: String(media.malId),
+    },
     url: item.url,
     rank: item.rank,
     popularity: item.popularity,

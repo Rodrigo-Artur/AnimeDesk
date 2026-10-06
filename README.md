@@ -24,6 +24,7 @@ A primeira base funcional já inclui:
 - Todo item de descoberta precisa ser resolvido para MAL ID real via Kitsu mappings antes de entrar no app.
 - Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
 - Explicações de recomendação 0.2.2: os cards personalizados mostram fatores como afinidade de gêneros, título semelhante da sua biblioteca, nota pública, popularidade e recência.
+- Normalizador de IDs externos 0.3.0: cada mídia pode carregar vários IDs (myanimelist/anime, myanimelist/manga, kitsu, tmdb, crunchyroll etc.), persistidos em external_media_ids e resolvidos de volta para a mídia local.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
 - Tela de detalhes para anime e mangá com sinopse, gêneros, nota, ranking, estúdio/autores, progresso e relações entre obras.
 - Navegação entre prequelas, sequências e outras relações diretamente pelos detalhes.
@@ -171,9 +172,9 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Criar normalizador completo de IDs/títulos externos.
+1. Persistir cache de descoberta, regras de alertas e agenda no SQLite.
 2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
-3. Persistir cache de descoberta, regras de alertas e agenda no SQLite.
+3. Expandir o normalizador com mappings verificados de Crunchyroll/TMDB/outros providers.
 4. Adicionar testes automatizados do enriquecimento e da recomendação.
 5. Criar histórico e estatísticas detalhadas.
 6. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.

@@ -238,6 +238,10 @@ function mapKitsuResponse(response: KitsuResponse): DiscoverMedia[] {
       favoritesCount: item.attributes.favoritesCount,
       startDate: item.attributes.startDate,
       nextRelease: item.attributes.nextRelease,
+      externalIds: {
+        'myanimelist/anime': String(malId),
+        kitsu: item.id,
+      },
     });
   }
 

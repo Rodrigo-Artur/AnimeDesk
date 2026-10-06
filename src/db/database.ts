@@ -6,6 +6,7 @@ const DB_URL = 'sqlite:animedesk.db';
 let databasePromise: Promise<Database> | null = null;
 
 type LibraryRow = {
+  media_pk: number;
   mal_id: number;
   type: 'anime' | 'manga';
   title: string;
@@ -22,6 +23,22 @@ type LibraryRow = {
   progress: number;
   user_score: number | null;
   updated_at: string;
+};
+
+type ExternalIdRow = {
+  media_id: number;
+  provider: string;
+  external_id: string;
+};
+
+export type ResolvedExternalMedia = {
+  type: Media['type'];
+  malId: number;
+  title: string;
+  provider: string;
+  externalId: string;
+  confidence: number | null;
+  verified: boolean;
 };
 
 async function getDatabase(): Promise<Database | null> {
@@ -44,7 +61,10 @@ function safeGenres(value: string): string[] {
   }
 }
 
-function rowToEntry(row: LibraryRow): LibraryEntry {
+function rowToEntry(
+  row: LibraryRow,
+  externalIds: Record<string, string>,
+): LibraryEntry {
   const media: Media = {
     id: row.mal_id,
     malId: row.mal_id,
@@ -59,6 +79,10 @@ function rowToEntry(row: LibraryRow): LibraryEntry {
     year: row.year,
     genres: safeGenres(row.genres_json),
     status: row.airing_status ?? undefined,
+    externalIds: {
+      [`myanimelist/${row.type}`]: String(row.mal_id),
+      ...externalIds,
+    },
   };
 
   return {
@@ -76,6 +100,7 @@ export async function loadNativeLibrary(): Promise<LibraryEntry[]> {
 
   const rows = await db.select<LibraryRow[]>(`
     SELECT
+      m.id AS media_pk,
       m.mal_id,
       m.type,
       m.title,
@@ -97,7 +122,75 @@ export async function loadNativeLibrary(): Promise<LibraryEntry[]> {
     ORDER BY l.updated_at DESC
   `);
 
-  return rows.map(rowToEntry);
+  const externalRows = await db.select<ExternalIdRow[]>(`
+    SELECT media_id, provider, external_id
+    FROM external_media_ids
+  `);
+
+  const externalByMedia = new Map<number, Record<string, string>>();
+  for (const row of externalRows) {
+    const ids = externalByMedia.get(row.media_id) ?? {};
+    ids[row.provider] = row.external_id;
+    externalByMedia.set(row.media_id, ids);
+  }
+
+  return rows.map((row) =>
+    rowToEntry(row, externalByMedia.get(row.media_pk) ?? {}),
+  );
+}
+
+async function upsertExternalMediaId(
+  db: Database,
+  media: Media,
+  provider: string,
+  externalId: string,
+  confidence = 1,
+  verified = true,
+): Promise<void> {
+  const cleanProvider = provider.trim().toLowerCase();
+  const cleanExternalId = externalId.trim();
+  const safeConfidence = Math.max(0, Math.min(1, confidence));
+  if (!cleanProvider || !cleanExternalId) return;
+
+  const targetRows = await db.select<Array<{ id: number }>>(
+    'SELECT id FROM media WHERE type = $1 AND mal_id = $2 LIMIT 1',
+    [media.type, media.malId],
+  );
+  const targetMediaId = targetRows[0]?.id;
+  if (!targetMediaId) return;
+
+  const existingRows = await db.select<Array<{ media_id: number }>>(
+    `SELECT media_id
+     FROM external_media_ids
+     WHERE provider = $1 AND external_id = $2
+     LIMIT 1`,
+    [cleanProvider, cleanExternalId],
+  );
+
+  const existing = existingRows[0];
+  if (existing && existing.media_id !== targetMediaId) {
+    throw new Error(
+      `O ID externo ${cleanProvider}:${cleanExternalId} já está ligado a outra mídia.`,
+    );
+  }
+
+  await db.execute(
+    `INSERT INTO external_media_ids (
+       media_id, provider, external_id, external_title, confidence, verified
+     ) VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT(provider, external_id) DO UPDATE SET
+       external_title=excluded.external_title,
+       confidence=excluded.confidence,
+       verified=excluded.verified`,
+    [
+      targetMediaId,
+      cleanProvider,
+      cleanExternalId,
+      media.titleEnglish || media.title,
+      safeConfidence,
+      verified ? 1 : 0,
+    ],
+  );
 }
 
 export async function saveNativeEntry(entry: LibraryEntry): Promise<void> {
@@ -139,6 +232,24 @@ export async function saveNativeEntry(entry: LibraryEntry): Promise<void> {
     ],
   );
 
+  const externalIds = {
+    [`myanimelist/${media.type}`]: String(media.malId),
+    ...(media.externalIds ?? {}),
+  };
+
+  for (const [provider, externalId] of Object.entries(externalIds)) {
+    try {
+      await upsertExternalMediaId(db, media, provider, externalId);
+    } catch (error) {
+      const canonicalProvider = `myanimelist/${media.type}`;
+      if (provider === canonicalProvider) throw error;
+      console.warn(
+        `ID externo ignorado por conflito (${provider}:${externalId}):`,
+        error,
+      );
+    }
+  }
+
   await db.execute(
     `INSERT INTO library_entries (media_id, status, progress, score, updated_at)
      SELECT id, $3, $4, $5, $6 FROM media WHERE type = $1 AND mal_id = $2
@@ -149,6 +260,131 @@ export async function saveNativeEntry(entry: LibraryEntry): Promise<void> {
        updated_at=excluded.updated_at`,
     [media.type, media.malId, entry.status, entry.progress, entry.score ?? null, entry.updatedAt],
   );
+}
+
+export async function linkExternalMediaId(
+  media: Media,
+  provider: string,
+  externalId: string,
+  confidence = 1,
+  verified = false,
+): Promise<void> {
+  const db = await getDatabase();
+  if (!db) return;
+  await upsertExternalMediaId(
+    db,
+    media,
+    provider,
+    externalId,
+    confidence,
+    verified,
+  );
+}
+
+export async function getExternalMediaIds(
+  type: Media['type'],
+  malId: number,
+): Promise<Record<string, string>> {
+  const db = await getDatabase();
+  if (!db) return { [`myanimelist/${type}`]: String(malId) };
+
+  const rows = await db.select<Array<{ provider: string; external_id: string }>>(
+    `SELECT e.provider, e.external_id
+     FROM external_media_ids e
+     INNER JOIN media m ON m.id = e.media_id
+     WHERE m.type = $1 AND m.mal_id = $2`,
+    [type, malId],
+  );
+
+  const result: Record<string, string> = {
+    [`myanimelist/${type}`]: String(malId),
+  };
+  for (const row of rows) {
+    result[row.provider] = row.external_id;
+  }
+  return result;
+}
+
+export async function resolveExternalMediaId(
+  provider: string,
+  externalId: string,
+): Promise<ResolvedExternalMedia | null> {
+  const db = await getDatabase();
+  if (!db) return null;
+
+  const cleanProvider = provider.trim().toLowerCase();
+  const cleanExternalId = externalId.trim();
+
+  if (
+    cleanProvider === 'myanimelist/anime' ||
+    cleanProvider === 'myanimelist/manga'
+  ) {
+    const type: Media['type'] = cleanProvider.endsWith('/manga') ? 'manga' : 'anime';
+    const malId = Number(cleanExternalId);
+    if (!Number.isInteger(malId) || malId <= 0) return null;
+
+    const mediaRows = await db.select<Array<{
+      type: Media['type'];
+      mal_id: number;
+      title: string;
+    }>>(
+      `SELECT type, mal_id, title
+       FROM media
+       WHERE type = $1 AND mal_id = $2
+       LIMIT 1`,
+      [type, malId],
+    );
+
+    const mediaRow = mediaRows[0];
+    if (!mediaRow) return null;
+
+    return {
+      type: mediaRow.type,
+      malId: mediaRow.mal_id,
+      title: mediaRow.title,
+      provider: cleanProvider,
+      externalId: cleanExternalId,
+      confidence: 1,
+      verified: true,
+    };
+  }
+
+  const rows = await db.select<Array<{
+    type: Media['type'];
+    mal_id: number;
+    title: string;
+    provider: string;
+    external_id: string;
+    confidence: number | null;
+    verified: number;
+  }>>(
+    `SELECT
+       m.type,
+       m.mal_id,
+       m.title,
+       e.provider,
+       e.external_id,
+       e.confidence,
+       e.verified
+     FROM external_media_ids e
+     INNER JOIN media m ON m.id = e.media_id
+     WHERE e.provider = $1 AND e.external_id = $2
+     LIMIT 1`,
+    [cleanProvider, cleanExternalId],
+  );
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    type: row.type,
+    malId: row.mal_id,
+    title: row.title,
+    provider: row.provider,
+    externalId: row.external_id,
+    confidence: row.confidence,
+    verified: Boolean(row.verified),
+  };
 }
 
 export async function removeNativeEntry(malId: number, type: Media['type']): Promise<void> {

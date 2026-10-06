@@ -140,6 +140,10 @@ function mapPayload(
       synopsis: attributes.synopsis || attributes.description || undefined,
       genres,
       year: yearFromDate(attributes.startDate),
+      externalIds: {
+        [`myanimelist/${mediaType}`]: String(malId),
+        kitsu: resource.id,
+      },
     });
   }
 

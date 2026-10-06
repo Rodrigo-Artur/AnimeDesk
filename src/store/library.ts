@@ -59,6 +59,11 @@ function mergeImportedEntry(existing: LibraryEntry, incoming: LibraryEntry): Lib
       status: existing.media.status ?? incoming.media.status,
       year: existing.media.year ?? incoming.media.year,
       genres: existing.media.genres.length ? existing.media.genres : incoming.media.genres,
+      externalIds: {
+        ...(incoming.media.externalIds ?? {}),
+        ...(existing.media.externalIds ?? {}),
+        [`myanimelist/${existing.media.type}`]: String(existing.media.malId),
+      },
     },
     status: incoming.status,
     progress: incoming.progress,
@@ -86,6 +91,11 @@ function mergeEnrichedMedia(existing: Media, incoming: Media): Media {
     synopsis: incoming.synopsis ?? existing.synopsis,
     genres: incoming.genres.length ? incoming.genres : existing.genres,
     year: incoming.year ?? existing.year,
+    externalIds: {
+      ...(existing.externalIds ?? {}),
+      ...(incoming.externalIds ?? {}),
+      [`myanimelist/${existing.type}`]: String(existing.malId),
+    },
   };
 }
 
