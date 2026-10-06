@@ -1,6 +1,6 @@
 [package]
 name = "animedesk"
-version = "0.3.2"
+version = "0.4.0"
 description = "Desktop anime and manga tracker with schedules, alerts and streaming integrations."
 authors = ["AnimeDesk"]
 license = ""

@@ -1,5 +1,10 @@
 import Database from '@tauri-apps/plugin-sql';
-import type { LibraryEntry, Media, ReleaseItem } from '../types/media';
+import type {
+  LibraryEntry,
+  Media,
+  ReleaseItem,
+  WatchHistoryEvent,
+} from '../types/media';
 import { isTauriRuntime } from '../services/platform';
 
 const DB_URL = 'sqlite:animedesk.db';
@@ -520,6 +525,61 @@ export async function removeNativeEntry(malId: number, type: Media['type']): Pro
     'DELETE FROM library_entries WHERE media_id = (SELECT id FROM media WHERE type = $1 AND mal_id = $2)',
     [type, malId],
   );
+}
+
+export async function loadWatchHistory(
+  limit = 300,
+): Promise<WatchHistoryEvent[]> {
+  const db = await getDatabase();
+  if (!db) return [];
+
+  const safeLimit = Math.max(1, Math.min(1000, Math.trunc(limit) || 300));
+
+  const rows = await db.select<Array<{
+    id: number;
+    media_type: Media['type'];
+    mal_id: number;
+    title: string;
+    title_english: string | null;
+    cover_url: string | null;
+    episode: number | null;
+    chapter: number | null;
+    provider: string | null;
+    watched_at: string;
+    source_event_id: string | null;
+  }>>(
+    `SELECT
+       h.id,
+       m.type AS media_type,
+       m.mal_id,
+       m.title,
+       m.title_english,
+       m.cover_url,
+       h.episode,
+       h.chapter,
+       h.provider,
+       h.watched_at,
+       h.source_event_id
+     FROM watch_history h
+     INNER JOIN media m ON m.id = h.media_id
+     ORDER BY datetime(h.watched_at) DESC, h.id DESC
+     LIMIT $1`,
+    [safeLimit],
+  );
+
+  return rows.map((row) => ({
+    id: row.id,
+    mediaType: row.media_type,
+    mediaMalId: row.mal_id,
+    mediaTitle: row.title,
+    mediaTitleEnglish: row.title_english,
+    imageUrl: row.cover_url ?? undefined,
+    episode: row.episode,
+    chapter: row.chapter,
+    provider: row.provider || 'manual',
+    watchedAt: row.watched_at,
+    sourceEventId: row.source_event_id,
+  }));
 }
 
 export async function recordManualProgress(

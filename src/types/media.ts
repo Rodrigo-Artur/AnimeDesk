@@ -62,3 +62,17 @@ export interface ReleaseItem {
   airType?: string;
   inLibrary?: boolean;
 }
+
+export interface WatchHistoryEvent {
+  id: number;
+  mediaType: MediaType;
+  mediaMalId: number;
+  mediaTitle: string;
+  mediaTitleEnglish?: string | null;
+  imageUrl?: string;
+  episode?: number | null;
+  chapter?: number | null;
+  provider: string;
+  watchedAt: string;
+  sourceEventId?: string | null;
+}

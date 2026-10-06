@@ -27,9 +27,11 @@ A primeira base funcional já inclui:
 - Normalizador de IDs externos 0.3.0: cada mídia pode carregar vários IDs (myanimelist/anime, myanimelist/manga, kitsu, tmdb, crunchyroll etc.), persistidos em external_media_ids e resolvidos de volta para a mídia local.
 - Persistência de estado 0.3.1: preferências de alertas, cache de descoberta, cache semanal da agenda, marcadores de notificações e timestamps de last-sync usam SQLite no Tauri, com migração automática do localStorage legado e fallback web.
 - Releases da biblioteca encontrados pela Agenda também são normalizados na tabela `releases`, com deduplicação explícita.
-- Testes automatizados 0.3.2 com Vitest + happy-dom: normalizador de IDs, parser MAL, enriquecimento Kitsu, recomendações e Agenda; 14 testes validados.
+- Testes automatizados 0.3.2 com Vitest + happy-dom; na 0.4.0 a suíte soma 17 testes cobrindo normalizador, parser MAL, enriquecimento Kitsu, recomendações, Agenda e estatísticas.
 - Parser XML do MAL endurecido para usar APIs XML nativas (`getElementsByTagName`) em vez de depender de seletores CSS.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
+- Tela **Histórico e estatísticas** 0.4.0 baseada no SQLite: totais de anime/mangá, concluídos/em andamento/planejados, episódios, capítulos, horas estimadas, nota média pessoal, gêneros, atividade dos últimos 6 meses, origem por provider e linha do tempo recente.
+- O histórico não é inventado a partir do progresso importado do MAL: imports afetam os totais atuais, enquanto a linha do tempo usa apenas eventos reais de `watch_history`.
 - Tela de detalhes para anime e mangá com sinopse, gêneros, nota, ranking, estúdio/autores, progresso e relações entre obras.
 - Navegação entre prequelas, sequências e outras relações diretamente pelos detalhes.
 - Agenda semanal funcional: AnimeSchedule quando há token e fallback automático pelo Jikan.
@@ -189,12 +191,11 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Criar página de histórico e estatísticas detalhadas.
-2. Expandir testes para store de biblioteca, cache expirado e conflitos de IDs.
-3. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
-4. Expandir o normalizador com mappings verificados de Crunchyroll/TMDB/outros providers.
-5. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
-6. Implementar importador de histórico Netflix.
-7. Implementar CrunchyrollProvider somente leitura.
-8. Criar UI de conflitos/mappings e last-sync.
-9. Polir ícone, CSP, identifier, instalador e atualização automática.
+1. Expandir testes para store de biblioteca, cache expirado, notification markers e conflitos de IDs.
+2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
+3. Criar UI de inspeção/conflitos de mappings externos.
+4. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
+5. Implementar importador de histórico Netflix.
+6. Implementar CrunchyrollProvider somente leitura.
+7. Evoluir estatísticas com filtros por período/provider e duração real quando providers externos fornecerem esse dado.
+8. Polir ícone, CSP, identifier, instalador e atualização automática.

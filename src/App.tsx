@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  BarChart3,
   Bell,
   BookOpen,
   CalendarDays,
@@ -24,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import './App.css';
+import { loadWatchHistory } from './db/database';
 import { getDiscoverHome } from './services/discover';
 import type { DiscoverMedia } from './services/discover';
 import { getMediaDetails, searchAnime, searchManga } from './services/jikan';
@@ -44,16 +46,22 @@ import {
 import { plannedStreamingProviders } from './services/providers';
 import { startReleaseWatcher } from './services/releaseWatcher';
 import { getWeeklySchedule } from './services/schedule';
+import {
+  computeAnimeDeskStats,
+  formatHistoryUnit,
+  parseWatchHistoryDate,
+} from './services/stats';
 import { useEnrichmentStore } from './store/enrichment';
 import { useLibraryStore } from './store/library';
 import { useUiStore } from './store/ui';
 import type { Media } from './types/media';
 
-type Page = 'home' | 'library' | 'agenda' | 'explore' | 'integrations' | 'settings';
+type Page = 'home' | 'library' | 'stats' | 'agenda' | 'explore' | 'integrations' | 'settings';
 
 const navItems: Array<{ id: Page; label: string; icon: typeof Home }> = [
   { id: 'home', label: 'Início', icon: Home },
   { id: 'library', label: 'Minha lista', icon: Library },
+  { id: 'stats', label: 'Estatísticas', icon: BarChart3 },
   { id: 'agenda', label: 'Agenda', icon: CalendarDays },
   { id: 'explore', label: 'Explorar', icon: Compass },
   { id: 'integrations', label: 'Integrações', icon: Link2 },
@@ -504,6 +512,211 @@ function LibraryPage() {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function StatsPage() {
+  const entries = useLibraryStore((state) => state.entries);
+  const native = isTauriRuntime();
+  const history = useQuery({
+    queryKey: ['watch-history'],
+    queryFn: () => loadWatchHistory(500),
+    enabled: native,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
+  const historyItems = history.data ?? [];
+  const stats = computeAnimeDeskStats(entries, historyItems);
+  const maxMonthly = Math.max(1, ...stats.monthlyActivity.map((item) => item.count));
+  const maxGenre = Math.max(1, ...stats.topGenres.map((item) => item.count));
+  const maxProvider = Math.max(1, ...stats.providerActivity.map((item) => item.count));
+  const providerLabels = new Map(
+    stats.providerActivity.map((item) => [item.provider, item.label]),
+  );
+
+  return (
+    <section className="section page-section stats-page">
+      <div className="page-heading">
+        <div>
+          <span>SEU HISTÓRICO LOCAL</span>
+          <h1>Histórico e estatísticas</h1>
+        </div>
+        <button
+          className="button secondary"
+          disabled={!native || history.isFetching}
+          onClick={() => void history.refetch()}
+        >
+          <Clock3 size={16} /> {history.isFetching ? 'Atualizando…' : 'Atualizar histórico'}
+        </button>
+      </div>
+
+      <div className="stats-summary-grid">
+        <article className="stats-summary-card">
+          <span>BIBLIOTECA</span>
+          <strong>{stats.totalTitles}</strong>
+          <small>{stats.animeTitles} anime · {stats.mangaTitles} mangá</small>
+        </article>
+        <article className="stats-summary-card">
+          <span>CONCLUÍDOS</span>
+          <strong>{stats.completedTitles}</strong>
+          <small>{stats.activeTitles} em andamento · {stats.plannedTitles} planejados</small>
+        </article>
+        <article className="stats-summary-card">
+          <span>EPISÓDIOS</span>
+          <strong>{stats.episodesProgress.toLocaleString('pt-BR')}</strong>
+          <small>progresso total atual em anime</small>
+        </article>
+        <article className="stats-summary-card">
+          <span>CAPÍTULOS</span>
+          <strong>{stats.chaptersProgress.toLocaleString('pt-BR')}</strong>
+          <small>progresso total atual em mangá</small>
+        </article>
+        <article className="stats-summary-card accent">
+          <span>HORAS ESTIMADAS</span>
+          <strong>{stats.estimatedWatchHours.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}h</strong>
+          <small>estimativa usando 24 min por episódio</small>
+        </article>
+        <article className="stats-summary-card">
+          <span>SUA NOTA MÉDIA</span>
+          <strong>{stats.averageUserScore?.toFixed(1) ?? '—'}</strong>
+          <small>{stats.scoredTitles} título(s) avaliados</small>
+        </article>
+      </div>
+
+      <div className="analytics-grid">
+        <section className="analytics-card activity-card">
+          <div className="analytics-card-head">
+            <div>
+              <span>ATIVIDADE</span>
+              <h2>Últimos 6 meses</h2>
+            </div>
+            <small>{stats.historyEvents} evento(s) registrado(s)</small>
+          </div>
+          <div className="activity-chart">
+            {stats.monthlyActivity.map((month) => {
+              const height = month.count
+                ? Math.max(8, Math.round((month.count / maxMonthly) * 100))
+                : 3;
+              return (
+                <div className="activity-column" key={month.key}>
+                  <strong>{month.count}</strong>
+                  <div className="activity-track">
+                    <span style={{ height: `${height}%` }} />
+                  </div>
+                  <small>{month.label}</small>
+                </div>
+              );
+            })}
+          </div>
+          <p className="analytics-note">
+            A linha do tempo conta somente eventos registrados pelo AnimeDesk ou por providers futuros.
+            Progresso importado do MAL entra nos totais acima, mas não gera histórico retroativo.
+          </p>
+        </section>
+
+        <section className="analytics-card">
+          <div className="analytics-card-head">
+            <div>
+              <span>PREFERÊNCIAS</span>
+              <h2>Gêneros na sua biblioteca</h2>
+            </div>
+          </div>
+          {stats.topGenres.length ? (
+            <div className="rank-list">
+              {stats.topGenres.map((genre) => (
+                <div className="rank-row" key={genre.name}>
+                  <div><strong>{genre.name}</strong><span>{genre.count}</span></div>
+                  <div className="rank-track">
+                    <span style={{ width: `${Math.max(4, (genre.count / maxGenre) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="analytics-empty">Adicione títulos enriquecidos para mapear seus gêneros.</div>
+          )}
+        </section>
+
+        <section className="analytics-card">
+          <div className="analytics-card-head">
+            <div>
+              <span>ORIGEM</span>
+              <h2>Eventos por provider</h2>
+            </div>
+          </div>
+          {stats.providerActivity.length ? (
+            <div className="rank-list">
+              {stats.providerActivity.map((provider) => (
+                <div className="rank-row" key={provider.provider}>
+                  <div><strong>{provider.label}</strong><span>{provider.count}</span></div>
+                  <div className="rank-track">
+                    <span style={{ width: `${Math.max(4, (provider.count / maxProvider) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="analytics-empty">Nenhum evento de progresso foi registrado ainda.</div>
+          )}
+        </section>
+      </div>
+
+      <section className="analytics-card stats-history-card">
+        <div className="analytics-card-head">
+          <div>
+            <span>LINHA DO TEMPO</span>
+            <h2>Atividade recente</h2>
+          </div>
+          <small>{native ? 'SQLite · watch_history' : 'Disponível no app desktop'}</small>
+        </div>
+
+        {history.isLoading && <div className="loading">Carregando histórico local…</div>}
+        {history.isError && (
+          <div className="analytics-empty">Não foi possível ler o histórico local agora.</div>
+        )}
+        {!history.isLoading && !history.isError && historyItems.length === 0 && (
+          <div className="analytics-empty">
+            Seu histórico começa quando você avança episódios ou capítulos no AnimeDesk.
+          </div>
+        )}
+
+        <div className="history-timeline">
+          {historyItems.slice(0, 50).map((event) => {
+            const date = parseWatchHistoryDate(event.watchedAt);
+            const dateLabel = date
+              ? date.toLocaleString('pt-BR', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : event.watchedAt;
+            const providerLabel =
+              providerLabels.get(event.provider) ||
+              (event.provider === 'manual' ? 'AnimeDesk' : event.provider);
+
+            return (
+              <article className="history-row" key={event.id}>
+                <div className="history-cover">
+                  {event.imageUrl
+                    ? <img src={event.imageUrl} alt="" />
+                    : event.mediaType === 'manga'
+                      ? <BookOpen size={18} />
+                      : <Tv size={18} />}
+                </div>
+                <div className="history-main">
+                  <strong>{event.mediaTitleEnglish || event.mediaTitle}</strong>
+                  <span>{formatHistoryUnit(event)} · {providerLabel}</span>
+                </div>
+                <time>{dateLabel}</time>
+              </article>
+            );
+          })}
+        </div>
+      </section>
     </section>
   );
 }
@@ -1089,6 +1302,7 @@ export default function App() {
         <div className="content">
           {page === 'home' && <HomePage />}
           {page === 'library' && <LibraryPage />}
+          {page === 'stats' && <StatsPage />}
           {page === 'agenda' && <AgendaPage />}
           {page === 'explore' && <ExplorePage />}
           {page === 'integrations' && <IntegrationsPage />}
