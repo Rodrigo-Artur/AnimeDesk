@@ -1,5 +1,5 @@
 import Database from '@tauri-apps/plugin-sql';
-import type { LibraryEntry, Media } from '../types/media';
+import type { LibraryEntry, Media, ReleaseItem } from '../types/media';
 import { isTauriRuntime } from '../services/platform';
 
 const DB_URL = 'sqlite:animedesk.db';
@@ -385,6 +385,131 @@ export async function resolveExternalMediaId(
     confidence: row.confidence,
     verified: Boolean(row.verified),
   };
+}
+
+export async function cacheNativeReleases(
+  items: ReleaseItem[],
+): Promise<number> {
+  const db = await getDatabase();
+  if (!db) return 0;
+
+  let cached = 0;
+
+  for (const item of items) {
+    if (!item.mediaMalId) continue;
+
+    const mediaRows = await db.select<Array<{ id: number }>>(
+      `SELECT id
+       FROM media
+       WHERE type = 'anime' AND mal_id = $1
+       LIMIT 1`,
+      [item.mediaMalId],
+    );
+    const mediaId = mediaRows[0]?.id;
+    if (!mediaId) continue;
+
+    const existingRows = await db.select<Array<{ id: number }>>(
+      `SELECT id
+       FROM releases
+       WHERE media_id = $1
+         AND provider = $2
+         AND release_at = $3
+         AND COALESCE(episode, -1) = COALESCE($4, -1)
+         AND COALESCE(chapter, -1) = COALESCE($5, -1)
+       LIMIT 1`,
+      [
+        mediaId,
+        item.provider,
+        item.releaseAt,
+        item.episode ?? null,
+        item.chapter ?? null,
+      ],
+    );
+
+    const existingId = existingRows[0]?.id;
+    if (existingId) {
+      await db.execute(
+        `UPDATE releases
+         SET release_type = $2
+         WHERE id = $1`,
+        [existingId, item.airType ?? null],
+      );
+    } else {
+      await db.execute(
+        `INSERT INTO releases (
+           media_id, episode, chapter, release_at, release_type, provider
+         ) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          mediaId,
+          item.episode ?? null,
+          item.chapter ?? null,
+          item.releaseAt,
+          item.airType ?? null,
+          item.provider,
+        ],
+      );
+    }
+
+    cached += 1;
+  }
+
+  await db.execute(
+    `DELETE FROM releases
+     WHERE datetime(release_at) < datetime('now', '-30 days')`,
+  );
+
+  return cached;
+}
+
+export async function getNativeSetting(key: string): Promise<string | null> {
+  const db = await getDatabase();
+  if (!db) return null;
+
+  const rows = await db.select<Array<{ value: string }>>(
+    'SELECT value FROM settings WHERE key = $1 LIMIT 1',
+    [key],
+  );
+  return rows[0]?.value ?? null;
+}
+
+export async function setNativeSetting(
+  key: string,
+  value: string,
+): Promise<void> {
+  const db = await getDatabase();
+  if (!db) return;
+
+  await db.execute(
+    `INSERT INTO settings (key, value, updated_at)
+     VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET
+       value=excluded.value,
+       updated_at=CURRENT_TIMESTAMP`,
+    [key, value],
+  );
+}
+
+export async function deleteNativeSetting(key: string): Promise<void> {
+  const db = await getDatabase();
+  if (!db) return;
+  await db.execute('DELETE FROM settings WHERE key = $1', [key]);
+}
+
+export async function getNativeSettingsByPrefix(
+  prefix: string,
+): Promise<Record<string, string>> {
+  const db = await getDatabase();
+  if (!db) return {};
+
+  const rows = await db.select<Array<{ key: string; value: string }>>(
+    `SELECT key, value
+     FROM settings
+     WHERE key LIKE $1
+     ORDER BY key`,
+    [`${prefix}%`],
+  );
+
+  return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
 export async function removeNativeEntry(malId: number, type: Media['type']): Promise<void> {

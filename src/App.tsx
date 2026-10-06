@@ -614,7 +614,10 @@ function AgendaPage() {
     <section className="section page-section">
       <div className="page-heading">
         <div>
-          <span>LANÇAMENTOS · {schedule.data?.source ?? 'CARREGANDO'}</span>
+          <span>
+            LANÇAMENTOS · {schedule.data?.source ?? 'CARREGANDO'}
+            {schedule.data?.cached ? ' · CACHE LOCAL' : ''}
+          </span>
           <h1>Agenda semanal</h1>
         </div>
         <button className="button secondary" onClick={() => void schedule.refetch()} disabled={schedule.isFetching}>
@@ -700,9 +703,11 @@ function AgendaPage() {
       </div>
 
       <p className="muted schedule-note">
-        {schedule.data?.source === 'AnimeSchedule'
-          ? 'Horários convertidos para America/Sao_Paulo usando AnimeSchedule.'
-          : 'Usando Jikan como fallback. Configure VITE_ANIMESCHEDULE_TOKEN para horários e números de episódio mais precisos.'}
+        {schedule.data?.cached
+          ? `Exibindo a última agenda salva localmente (${schedule.data.source}). Tente atualizar quando a conexão voltar.`
+          : schedule.data?.source === 'AnimeSchedule'
+            ? 'Horários convertidos para America/Sao_Paulo usando AnimeSchedule.'
+            : 'Usando Jikan como fallback. Configure VITE_ANIMESCHEDULE_TOKEN para horários e números de episódio mais precisos.'}
       </p>
     </section>
   );
@@ -929,8 +934,29 @@ function SettingsPage() {
   const [autostart, setAutostart] = useState(false);
   const [loadingAutostart, setLoadingAutostart] = useState(native);
   const [notificationMessage, setNotificationMessage] = useState('');
-  const [releaseAlerts, setReleaseAlerts] = useState(getReleaseAlertsEnabled);
-  const [alertLeadMinutes, setAlertLeadMinutesState] = useState(getReleaseAlertLeadMinutes);
+  const [releaseAlerts, setReleaseAlerts] = useState(true);
+  const [alertLeadMinutes, setAlertLeadMinutesState] = useState(10);
+  const [loadingReleasePreferences, setLoadingReleasePreferences] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([
+      getReleaseAlertsEnabled(),
+      getReleaseAlertLeadMinutes(),
+    ]).then(([enabled, leadMinutes]) => {
+      if (cancelled) return;
+      setReleaseAlerts(enabled);
+      setAlertLeadMinutesState(leadMinutes);
+      setLoadingReleasePreferences(false);
+    }).catch(() => {
+      if (!cancelled) setLoadingReleasePreferences(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!native) return;
@@ -957,14 +983,14 @@ function SettingsPage() {
     setNotificationMessage(success ? 'Notificação enviada.' : 'Não foi possível enviar a notificação.');
   };
 
-  const toggleReleaseAlerts = (enabled: boolean) => {
+  const toggleReleaseAlerts = async (enabled: boolean) => {
     setReleaseAlerts(enabled);
-    setReleaseAlertsEnabled(enabled);
+    await setReleaseAlertsEnabled(enabled);
   };
 
-  const changeAlertLead = (minutes: number) => {
+  const changeAlertLead = async (minutes: number) => {
     setAlertLeadMinutesState(minutes);
-    setReleaseAlertLeadMinutes(minutes);
+    await setReleaseAlertLeadMinutes(minutes);
   };
 
   return (
@@ -989,7 +1015,8 @@ function SettingsPage() {
           <input
             type="checkbox"
             checked={releaseAlerts}
-            onChange={(event) => toggleReleaseAlerts(event.target.checked)}
+            disabled={loadingReleasePreferences}
+            onChange={(event) => void toggleReleaseAlerts(event.target.checked)}
           />
         </label>
         <div className="setting-action">
@@ -997,8 +1024,8 @@ function SettingsPage() {
           <select
             className="settings-select"
             value={alertLeadMinutes}
-            disabled={!releaseAlerts}
-            onChange={(event) => changeAlertLead(Number(event.target.value))}
+            disabled={!releaseAlerts || loadingReleasePreferences}
+            onChange={(event) => void changeAlertLead(Number(event.target.value))}
           >
             <option value={10}>10 minutos</option>
             <option value={30}>30 minutos</option>

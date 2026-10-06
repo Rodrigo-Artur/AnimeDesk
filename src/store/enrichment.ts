@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { setLastSync } from '../services/appState';
 import { enrichMalBatch } from '../services/enrichment';
 import type {
   EnrichmentFailure,
@@ -224,6 +225,8 @@ async function runTargets(targets: EnrichmentTarget[]) {
     currentTitle: '',
     finishedAt: new Date().toISOString(),
   });
+
+  await setLastSync('enrichment');
 }
 
 export const useEnrichmentStore = create<EnrichmentStore>((set, get) => ({

@@ -6,6 +6,7 @@ use tauri::{
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 const MAX_COVER_BYTES: usize = 8 * 1024 * 1024;
+const USER_AGENT: &str = concat!("AnimeDesk/", env!("CARGO_PKG_VERSION"));
 
 async fn kitsu_client() -> Result<reqwest::Client, String> {
   reqwest::Client::builder()
@@ -21,7 +22,7 @@ async fn kitsu_anime_query(
   let response = client
     .get("https://kitsu.io/api/edge/anime")
     .query(&params)
-    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.1.1")
+    .header(reqwest::header::USER_AGENT, USER_AGENT)
     .send()
     .await
     .map_err(|error| format!("Falha ao consultar o Kitsu: {error}"))?;
@@ -33,7 +34,7 @@ async fn kitsu_anime_query(
   response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta inválida do Kitsu: {error}"))
+    .map_err(|error| format!("Resposta invÃ¡lida do Kitsu: {error}"))
 }
 
 #[tauri::command]
@@ -47,7 +48,7 @@ async fn fetch_kitsu_discover(
   if kind == "trending" {
     let trending = client
       .get("https://kitsu.io/api/edge/trending/anime")
-      .header(reqwest::header::USER_AGENT, "AnimeDesk/0.1.1")
+      .header(reqwest::header::USER_AGENT, USER_AGENT)
       .send()
       .await
       .map_err(|error| format!("Falha ao consultar trending do Kitsu: {error}"))?;
@@ -59,7 +60,7 @@ async fn fetch_kitsu_discover(
     let trending_json = trending
       .json::<serde_json::Value>()
       .await
-      .map_err(|error| format!("Resposta inválida do Kitsu trending: {error}"))?;
+      .map_err(|error| format!("Resposta invÃ¡lida do Kitsu trending: {error}"))?;
 
     let ids: Vec<String> = trending_json
       .get("data")
@@ -119,13 +120,13 @@ async fn fetch_kitsu_discover(
     "seasonal" => {
       let season = season
         .filter(|value| matches!(value.as_str(), "winter" | "spring" | "summer" | "fall"))
-        .ok_or_else(|| "Temporada inválida para descoberta.".to_string())?;
+        .ok_or_else(|| "Temporada invÃ¡lida para descoberta.".to_string())?;
       let year = year.ok_or_else(|| "Ano ausente para descoberta sazonal.".to_string())?;
       params.push(("filter[season]".into(), season));
       params.push(("filter[seasonYear]".into(), year.to_string()));
       params.push(("sort".into(), "-userCount".into()));
     }
-    _ => return Err("Tipo de descoberta inválido.".into()),
+    _ => return Err("Tipo de descoberta invÃ¡lido.".into()),
   }
 
   kitsu_anime_query(&client, params).await
@@ -137,7 +138,7 @@ async fn enrich_kitsu_by_mal_ids(
   mal_ids: Vec<i64>,
 ) -> Result<serde_json::Value, String> {
   if media_type != "anime" && media_type != "manga" {
-    return Err("Tipo de mídia inválido para enriquecimento.".into());
+    return Err("Tipo de mÃ­dia invÃ¡lido para enriquecimento.".into());
   }
 
   if mal_ids.is_empty() {
@@ -148,11 +149,11 @@ async fn enrich_kitsu_by_mal_ids(
   }
 
   if mal_ids.len() > 20 {
-    return Err("O enriquecimento aceita no máximo 20 IDs por lote.".into());
+    return Err("O enriquecimento aceita no mÃ¡ximo 20 IDs por lote.".into());
   }
 
   if mal_ids.iter().any(|id| *id <= 0) {
-    return Err("A lista contém MAL ID inválido.".into());
+    return Err("A lista contÃ©m MAL ID invÃ¡lido.".into());
   }
 
   let client = kitsu_client().await?;
@@ -175,7 +176,7 @@ async fn enrich_kitsu_by_mal_ids(
       ("page[limit]", "20"),
       ("include", "item"),
     ])
-    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.2.1")
+    .header(reqwest::header::USER_AGENT, USER_AGENT)
     .send()
     .await
     .map_err(|error| format!("Falha ao resolver MAL IDs no Kitsu: {error}"))?;
@@ -190,7 +191,7 @@ async fn enrich_kitsu_by_mal_ids(
   let mappings_json = mappings_response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta inválida do Kitsu mappings: {error}"))?;
+    .map_err(|error| format!("Resposta invÃ¡lida do Kitsu mappings: {error}"))?;
 
   let mappings = mappings_json
     .get("data")
@@ -226,7 +227,7 @@ async fn enrich_kitsu_by_mal_ids(
       ("page[limit]", "20".into()),
       ("include", "categories".into()),
     ])
-    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.2.1")
+    .header(reqwest::header::USER_AGENT, USER_AGENT)
     .send()
     .await
     .map_err(|error| format!("Falha ao buscar metadados Kitsu: {error}"))?;
@@ -241,7 +242,7 @@ async fn enrich_kitsu_by_mal_ids(
   let media_json = media_response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta inválida dos metadados Kitsu: {error}"))?;
+    .map_err(|error| format!("Resposta invÃ¡lida dos metadados Kitsu: {error}"))?;
 
   Ok(serde_json::json!({
     "mappings": mappings,
@@ -255,7 +256,7 @@ async fn search_myanimelist(
   keyword: String,
 ) -> Result<serde_json::Value, String> {
   if media_type != "anime" && media_type != "manga" {
-    return Err("Tipo de mídia inválido.".into());
+    return Err("Tipo de mÃ­dia invÃ¡lido.".into());
   }
 
   let keyword = keyword.trim();
@@ -278,7 +279,7 @@ async fn search_myanimelist(
       ("keyword", keyword),
       ("v", "1"),
     ])
-    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.1")
+    .header(reqwest::header::USER_AGENT, USER_AGENT)
     .send()
     .await
     .map_err(|error| format!("Falha ao consultar o MyAnimeList: {error}"))?;
@@ -293,7 +294,7 @@ async fn search_myanimelist(
   response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta inválida do MyAnimeList: {error}"))
+    .map_err(|error| format!("Resposta invÃ¡lida do MyAnimeList: {error}"))
 }
 
 fn cover_extension(content_type: Option<&str>, url: &str) -> &'static str {
@@ -329,10 +330,10 @@ async fn cache_cover(
   mal_id: i64,
 ) -> Result<String, String> {
   if media_type != "anime" && media_type != "manga" {
-    return Err("Tipo de mídia inválido.".into());
+    return Err("Tipo de mÃ­dia invÃ¡lido.".into());
   }
   if mal_id <= 0 {
-    return Err("MAL ID inválido.".into());
+    return Err("MAL ID invÃ¡lido.".into());
   }
   if !(url.starts_with("https://") || url.starts_with("http://")) {
     return Err("A capa precisa usar uma URL HTTP/HTTPS.".into());
@@ -345,7 +346,7 @@ async fn cache_cover(
 
   let response = client
     .get(&url)
-    .header(reqwest::header::USER_AGENT, "AnimeDesk/0.1")
+    .header(reqwest::header::USER_AGENT, USER_AGENT)
     .send()
     .await
     .map_err(|error| format!("Falha ao baixar a capa: {error}"))?;

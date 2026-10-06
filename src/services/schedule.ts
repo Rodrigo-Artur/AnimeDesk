@@ -1,4 +1,11 @@
+import { cacheNativeReleases } from '../db/database';
 import type { LibraryEntry, ReleaseItem } from '../types/media';
+import {
+  getJsonAppState,
+  removeAppState,
+  setJsonAppState,
+  setLastSync,
+} from './appState';
 
 const ANIME_SCHEDULE_BASE = 'https://animeschedule.net/api/v3';
 const JIKAN_BASE = 'https://api.jikan.moe/v4';
@@ -15,10 +22,19 @@ const weekdays = [
   'sunday',
 ] as const;
 
-type ScheduleResult = {
+export type ScheduleResult = {
   source: 'AnimeSchedule' | 'Jikan';
   items: ReleaseItem[];
+  cached?: boolean;
 };
+
+type CachedSchedulePayload = {
+  savedAt: number;
+  result: ScheduleResult;
+};
+
+const SCHEDULE_CACHE_KEY = 'animedesk-weekly-schedule-cache-v1';
+const SCHEDULE_CACHE_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 
 type AnimeScheduleEntry = {
   title: string;
@@ -119,6 +135,35 @@ async function delay(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function readScheduleCache(): Promise<ScheduleResult | null> {
+  const cached = await getJsonAppState<CachedSchedulePayload>(SCHEDULE_CACHE_KEY);
+  if (!cached) return null;
+
+  if (!cached.savedAt || Date.now() - cached.savedAt > SCHEDULE_CACHE_MAX_AGE_MS) {
+    await removeAppState(SCHEDULE_CACHE_KEY);
+    return null;
+  }
+
+  return {
+    ...cached.result,
+    cached: true,
+  };
+}
+
+async function persistSchedule(result: ScheduleResult): Promise<void> {
+  await Promise.all([
+    setJsonAppState<CachedSchedulePayload>(SCHEDULE_CACHE_KEY, {
+      savedAt: Date.now(),
+      result: { ...result, cached: false },
+    }),
+    setLastSync('schedule'),
+    cacheNativeReleases(result.items.filter((item) => item.inLibrary)).catch((error) => {
+      console.warn('Falha ao persistir releases normalizados:', error);
+      return 0;
+    }),
+  ]);
+}
+
 async function fetchJikanFallback(library: LibraryEntry[]): Promise<ScheduleResult> {
   const items: ReleaseItem[] = [];
 
@@ -156,23 +201,45 @@ async function fetchJikanFallback(library: LibraryEntry[]): Promise<ScheduleResu
 export async function getWeeklySchedule(library: LibraryEntry[] = []): Promise<ScheduleResult> {
   try {
     const animeSchedule = await fetchAnimeSchedule(library);
-    if (animeSchedule) {
-      return {
+    if (animeSchedule?.items.length) {
+      const result: ScheduleResult = {
         ...animeSchedule,
+        cached: false,
         items: animeSchedule.items.sort(
           (a, b) => new Date(a.releaseAt).getTime() - new Date(b.releaseAt).getTime(),
         ),
       };
+      await persistSchedule(result);
+      return result;
     }
   } catch (error) {
     console.warn('AnimeSchedule indisponível; usando Jikan como fallback.', error);
   }
 
-  const fallback = await fetchJikanFallback(library);
+  try {
+    const fallback = await fetchJikanFallback(library);
+    const result: ScheduleResult = {
+      ...fallback,
+      cached: false,
+      items: fallback.items.sort(
+        (a, b) => new Date(a.releaseAt).getTime() - new Date(b.releaseAt).getTime(),
+      ),
+    };
+
+    if (result.items.length) {
+      await persistSchedule(result);
+      return result;
+    }
+  } catch (error) {
+    console.warn('Jikan indisponível ao montar agenda.', error);
+  }
+
+  const cached = await readScheduleCache();
+  if (cached) return cached;
+
   return {
-    ...fallback,
-    items: fallback.items.sort(
-      (a, b) => new Date(a.releaseAt).getTime() - new Date(b.releaseAt).getTime(),
-    ),
+    source: 'Jikan',
+    items: [],
+    cached: false,
   };
 }

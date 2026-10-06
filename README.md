@@ -25,6 +25,8 @@ A primeira base funcional já inclui:
 - Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
 - Explicações de recomendação 0.2.2: os cards personalizados mostram fatores como afinidade de gêneros, título semelhante da sua biblioteca, nota pública, popularidade e recência.
 - Normalizador de IDs externos 0.3.0: cada mídia pode carregar vários IDs (myanimelist/anime, myanimelist/manga, kitsu, tmdb, crunchyroll etc.), persistidos em external_media_ids e resolvidos de volta para a mídia local.
+- Persistência de estado 0.3.1: preferências de alertas, cache de descoberta, cache semanal da agenda, marcadores de notificações e timestamps de last-sync usam SQLite no Tauri, com migração automática do localStorage legado e fallback web.
+- Releases da biblioteca encontrados pela Agenda também são normalizados na tabela `releases`, com deduplicação explícita.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
 - Tela de detalhes para anime e mangá com sinopse, gêneros, nota, ranking, estúdio/autores, progresso e relações entre obras.
 - Navegação entre prequelas, sequências e outras relações diretamente pelos detalhes.
@@ -77,8 +79,9 @@ O modelo SQLite planejado contém:
 - `releases`
 - `watch_history`
 - `notifications`
+- `settings`
 
-No Tauri, a aplicação usa SQLite como persistência principal. No navegador, usa localStorage como fallback. Na primeira execução nativa, uma biblioteca que exista no localStorage é migrada automaticamente para SQLite.
+No Tauri, a aplicação usa SQLite como persistência principal. No navegador, usa localStorage como fallback. Biblioteca e estados legados compatíveis são migrados automaticamente para SQLite quando encontrados. A tabela `settings` funciona como KV persistente para preferências, caches e last-sync sem exigir migration adicional.
 
 ## Importar do MyAnimeList
 
@@ -172,12 +175,12 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Persistir cache de descoberta, regras de alertas e agenda no SQLite.
-2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
-3. Expandir o normalizador com mappings verificados de Crunchyroll/TMDB/outros providers.
-4. Adicionar testes automatizados do enriquecimento e da recomendação.
-5. Criar histórico e estatísticas detalhadas.
-6. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
-7. Implementar importador de histórico Netflix.
-8. Implementar CrunchyrollProvider somente leitura.
+1. Adicionar testes automatizados do normalizador, enriquecimento, recomendador, parser MAL e agenda.
+2. Criar página de histórico e estatísticas detalhadas.
+3. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
+4. Expandir o normalizador com mappings verificados de Crunchyroll/TMDB/outros providers.
+5. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
+6. Implementar importador de histórico Netflix.
+7. Implementar CrunchyrollProvider somente leitura.
+8. Criar UI de conflitos/mappings e last-sync.
 9. Polir ícone, CSP, identifier, instalador e atualização automática.

@@ -1,4 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
+import {
+  getJsonAppState,
+  removeAppState,
+  setJsonAppState,
+  setLastSync,
+} from './appState';
 import { isTauriRuntime } from './platform';
 import type { LibraryEntry, Media } from '../types/media';
 
@@ -108,30 +114,25 @@ type CachedDiscoverPayload = {
   upcoming: DiscoverMedia[];
 };
 
-function readDiscoverCache(): CachedDiscoverPayload | null {
-  try {
-    const raw = localStorage.getItem(DISCOVER_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedDiscoverPayload;
-    if (!parsed.savedAt || Date.now() - parsed.savedAt > DISCOVER_CACHE_MAX_AGE_MS) {
-      localStorage.removeItem(DISCOVER_CACHE_KEY);
-      return null;
-    }
-    return parsed;
-  } catch {
+async function readDiscoverCache(): Promise<CachedDiscoverPayload | null> {
+  const parsed = await getJsonAppState<CachedDiscoverPayload>(DISCOVER_CACHE_KEY);
+  if (!parsed) return null;
+
+  if (!parsed.savedAt || Date.now() - parsed.savedAt > DISCOVER_CACHE_MAX_AGE_MS) {
+    await removeAppState(DISCOVER_CACHE_KEY);
     return null;
   }
+
+  return parsed;
 }
 
-function writeDiscoverCache(payload: Omit<CachedDiscoverPayload, 'savedAt'>): void {
-  try {
-    localStorage.setItem(
-      DISCOVER_CACHE_KEY,
-      JSON.stringify({ ...payload, savedAt: Date.now() }),
-    );
-  } catch {
-    // Cache de descoberta é best-effort; nunca deve bloquear a Home.
-  }
+async function writeDiscoverCache(
+  payload: Omit<CachedDiscoverPayload, 'savedAt'>,
+): Promise<void> {
+  await setJsonAppState(DISCOVER_CACHE_KEY, {
+    ...payload,
+    savedAt: Date.now(),
+  });
 }
 
 function currentSeason(): { season: SeasonName; year: number } {
@@ -594,7 +595,7 @@ export async function getDiscoverHome(
   const currentRaw = byName.get('current')?.items ?? [];
   const upcomingRaw = byName.get('upcoming')?.items ?? [];
 
-  const cache = readDiscoverCache();
+  const cache = await readDiscoverCache();
   let usedCache = false;
 
   const cachedOr = (items: DiscoverMedia[], cached: DiscoverMedia[] | undefined) => {
@@ -634,13 +635,16 @@ export async function getDiscoverHome(
     upcomingRaw.length;
 
   if (hasFreshData) {
-    writeDiscoverCache({
-      trending,
-      seasonal,
-      popular,
-      topRated,
-      upcoming,
-    });
+    await Promise.all([
+      writeDiscoverCache({
+        trending,
+        seasonal,
+        popular,
+        topRated,
+        upcoming,
+      }),
+      setLastSync('discover'),
+    ]);
   }
 
   return {

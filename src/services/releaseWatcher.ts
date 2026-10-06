@@ -1,23 +1,70 @@
 import type { LibraryEntry } from '../types/media';
+import {
+  getJsonAppState,
+  setJsonAppState,
+} from './appState';
 import { sendNativeNotification } from './native';
-import { getReleaseAlertLeadMinutes, getReleaseAlertsEnabled } from './preferences';
+import {
+  getReleaseAlertLeadMinutes,
+  getReleaseAlertsEnabled,
+} from './preferences';
 import { getWeeklySchedule } from './schedule';
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const SENT_PREFIX = 'animedesk-release-alert:';
+const SENT_MARKERS_KEY = 'animedesk-release-alert-markers-v1';
+const LEGACY_SENT_PREFIX = 'animedesk-release-alert:';
+const MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
-function cleanupOldMarkers() {
-  const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
-  for (let index = localStorage.length - 1; index >= 0; index -= 1) {
-    const key = localStorage.key(index);
-    if (!key?.startsWith(SENT_PREFIX)) continue;
-    const sentAt = Number(localStorage.getItem(key));
-    if (!Number.isFinite(sentAt) || sentAt < cutoff) localStorage.removeItem(key);
+type SentMarkers = Record<string, number>;
+
+function migrateLegacyMarkers(): SentMarkers {
+  const migrated: SentMarkers = {};
+
+  try {
+    for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+      const storageKey = localStorage.key(index);
+      if (!storageKey?.startsWith(LEGACY_SENT_PREFIX)) continue;
+
+      const sentAt = Number(localStorage.getItem(storageKey));
+      const marker = storageKey.slice(LEGACY_SENT_PREFIX.length);
+      if (marker && Number.isFinite(sentAt)) {
+        migrated[marker] = sentAt;
+      }
+      localStorage.removeItem(storageKey);
+    }
+  } catch {
+    // Migração legada é best-effort.
   }
+
+  return migrated;
+}
+
+async function loadMarkers(): Promise<SentMarkers> {
+  const markers = await getJsonAppState<SentMarkers>(SENT_MARKERS_KEY) ?? {};
+  const legacy = migrateLegacyMarkers();
+  const cutoff = Date.now() - MARKER_TTL_MS;
+  let changed = Object.keys(legacy).length > 0;
+
+  for (const [key, sentAt] of Object.entries(legacy)) {
+    markers[key] ??= sentAt;
+  }
+
+  for (const [key, sentAt] of Object.entries(markers)) {
+    if (!Number.isFinite(sentAt) || sentAt < cutoff) {
+      delete markers[key];
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    await setJsonAppState(SENT_MARKERS_KEY, markers);
+  }
+
+  return markers;
 }
 
 async function check(entries: LibraryEntry[]) {
-  if (!getReleaseAlertsEnabled()) return;
+  if (!(await getReleaseAlertsEnabled())) return;
 
   const tracked = entries.filter(
     (entry) =>
@@ -27,9 +74,11 @@ async function check(entries: LibraryEntry[]) {
   if (!tracked.length) return;
 
   const trackedIds = new Set(tracked.map((entry) => entry.media.malId));
-  const leadMinutes = getReleaseAlertLeadMinutes();
+  const leadMinutes = await getReleaseAlertLeadMinutes();
   const leadMs = leadMinutes * 60 * 1000;
   const now = Date.now();
+  const markers = await loadMarkers();
+  let markersChanged = false;
 
   const schedule = await getWeeklySchedule(entries);
   const candidates = schedule.items.filter(
@@ -41,8 +90,8 @@ async function check(entries: LibraryEntry[]) {
     const untilRelease = releaseTime - now;
     if (untilRelease < 0 || untilRelease > leadMs) continue;
 
-    const marker = `${SENT_PREFIX}${item.id}:${leadMinutes}`;
-    if (localStorage.getItem(marker)) continue;
+    const marker = `${item.id}:${leadMinutes}`;
+    if (markers[marker]) continue;
 
     const episode = item.episode ? `Episódio ${item.episode}` : 'Novo episódio';
     const time = new Date(item.releaseAt).toLocaleTimeString('pt-BR', {
@@ -55,17 +104,31 @@ async function check(entries: LibraryEntry[]) {
       `${episode} previsto para ${time}. Faltam até ${leadMinutes} minutos.`,
     );
 
-    if (sent) localStorage.setItem(marker, String(Date.now()));
+    if (sent) {
+      markers[marker] = Date.now();
+      markersChanged = true;
+    }
+  }
+
+  if (markersChanged) {
+    await setJsonAppState(SENT_MARKERS_KEY, markers);
   }
 }
 
 export function startReleaseWatcher(getEntries: () => LibraryEntry[]): () => void {
-  cleanupOldMarkers();
+  let running = false;
 
   const run = () => {
-    void check(getEntries()).catch((error) => {
-      console.error('Falha ao verificar alertas de lançamentos:', error);
-    });
+    if (running) return;
+    running = true;
+
+    void check(getEntries())
+      .catch((error) => {
+        console.error('Falha ao verificar alertas de lançamentos:', error);
+      })
+      .finally(() => {
+        running = false;
+      });
   };
 
   run();
