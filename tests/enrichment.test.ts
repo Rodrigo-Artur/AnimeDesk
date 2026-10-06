@@ -47,12 +47,28 @@ describe('enriquecimento MAL → Kitsu', () => {
                     { id: 'adventure', type: 'categories' },
                   ],
                 },
+                animeProductions: {
+                  data: [{ id: 'prod-1', type: 'animeProductions' }],
+                },
               },
             },
           ],
           included: [
             { id: 'fantasy', type: 'categories', attributes: { title: 'Fantasy' } },
             { id: 'adventure', type: 'categories', attributes: { title: 'Adventure' } },
+            {
+              id: 'prod-1',
+              type: 'animeProductions',
+              attributes: { role: 'studio' },
+              relationships: {
+                producer: { data: { id: 'producer-1', type: 'producers' } },
+              },
+            },
+            {
+              id: 'producer-1',
+              type: 'producers',
+              attributes: { name: 'Madhouse' },
+            },
           ],
         }),
       });
@@ -71,6 +87,7 @@ describe('enriquecimento MAL → Kitsu', () => {
     expect(media?.episodes).toBe(28);
     expect(media?.year).toBe(2023);
     expect(media?.genres).toEqual(['Fantasy', 'Adventure']);
+    expect(media?.studios).toEqual(['Madhouse']);
     expect(media?.externalIds).toEqual({
       'myanimelist/anime': '52991',
       kitsu: '46474',

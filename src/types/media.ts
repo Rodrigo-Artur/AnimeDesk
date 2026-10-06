@@ -14,6 +14,7 @@ export interface Media {
   status?: string;
   synopsis?: string;
   genres: string[];
+  studios?: string[];
   year?: number | null;
   externalIds?: Record<string, string>;
 }
@@ -34,7 +35,6 @@ export interface MediaDetails extends Media {
   popularity?: number | null;
   members?: number | null;
   favorites?: number | null;
-  studios?: string[];
   authors?: string[];
   relations?: MediaRelation[];
   background?: string | null;

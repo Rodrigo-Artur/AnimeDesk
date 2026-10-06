@@ -46,6 +46,7 @@ describe('library store', () => {
       episodes: 28,
       synopsis: 'Uma jornada depois da aventura.',
       genres: ['Fantasy', 'Adventure'],
+      studios: ['Madhouse'],
       year: 2023,
       externalIds: {
         'myanimelist/anime': '52991',
@@ -63,6 +64,7 @@ describe('library store', () => {
     expect(entry.media.titleEnglish).toBe('Frieren: Beyond Journey’s End');
     expect(entry.media.episodes).toBe(28);
     expect(entry.media.genres).toEqual(['Fantasy', 'Adventure']);
+    expect(entry.media.studios).toEqual(['Madhouse']);
     expect(entry.media.externalIds).toEqual({
       'myanimelist/anime': '52991',
       kitsu: '46474',
@@ -104,6 +106,7 @@ describe('library store', () => {
           imageUrl: 'asset://frieren.jpg',
           synopsis: 'Sinopse local rica',
           genres: ['Fantasy', 'Adventure'],
+          studios: ['Madhouse'],
           externalIds: {
             'myanimelist/anime': '52991',
             kitsu: '46474',
@@ -144,6 +147,7 @@ describe('library store', () => {
     expect(entry.media.imageUrl).toBe('asset://frieren.jpg');
     expect(entry.media.synopsis).toBe('Sinopse local rica');
     expect(entry.media.genres).toEqual(['Fantasy', 'Adventure']);
+    expect(entry.media.studios).toEqual(['Madhouse']);
     expect(entry.media.episodes).toBe(28);
     expect(entry.media.externalIds?.kitsu).toBe('46474');
   });

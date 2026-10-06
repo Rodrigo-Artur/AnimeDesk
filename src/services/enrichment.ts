@@ -26,11 +26,18 @@ type KitsuMapping = {
   };
 };
 
-type KitsuCategory = {
+type KitsuIncludedResource = {
   id: string;
-  type: 'categories';
+  type: string;
   attributes?: {
     title?: string;
+    name?: string;
+    role?: string;
+  };
+  relationships?: {
+    producer?: {
+      data?: { id: string; type: string } | null;
+    };
   };
 };
 
@@ -58,6 +65,9 @@ type KitsuMediaResource = {
     categories?: {
       data?: Array<{ id: string; type: string }>;
     };
+    animeProductions?: {
+      data?: Array<{ id: string; type: string }>;
+    };
   };
 };
 
@@ -65,7 +75,7 @@ type EnrichmentPayload = {
   mappings?: KitsuMapping[];
   media?: {
     data?: KitsuMediaResource[];
-    included?: KitsuCategory[];
+    included?: KitsuIncludedResource[];
   };
 };
 
@@ -97,9 +107,21 @@ function mapPayload(
   }
 
   const categoryById = new Map<string, string>();
+  const producerById = new Map<string, string>();
+  const productionById = new Map<string, { role?: string; producerId?: string }>();
+
   for (const included of payload.media?.included ?? []) {
     if (included.type === 'categories' && included.attributes?.title) {
       categoryById.set(included.id, included.attributes.title);
+    }
+    if (included.type === 'producers' && included.attributes?.name) {
+      producerById.set(included.id, included.attributes.name);
+    }
+    if (included.type === 'animeProductions') {
+      productionById.set(included.id, {
+        role: included.attributes?.role,
+        producerId: included.relationships?.producer?.data?.id,
+      });
     }
   }
 
@@ -114,6 +136,15 @@ function mapPayload(
       .map((ref) => categoryById.get(ref.id))
       .filter((value): value is string => Boolean(value))
       .filter((value, index, all) => all.indexOf(value) === index);
+
+    const studios = mediaType === 'anime'
+      ? (resource.relationships?.animeProductions?.data ?? [])
+          .map((ref) => productionById.get(ref.id))
+          .filter((production) => production?.role === 'studio' && Boolean(production.producerId))
+          .map((production) => producerById.get(production?.producerId ?? ''))
+          .filter((value): value is string => Boolean(value))
+          .filter((value, index, all) => all.indexOf(value) === index)
+      : [];
 
     const titleEnglish =
       attributes.titles?.en ||
@@ -139,6 +170,7 @@ function mapPayload(
       status: attributes.status ?? undefined,
       synopsis: attributes.synopsis || attributes.description || undefined,
       genres,
+      studios,
       year: yearFromDate(attributes.startDate),
       externalIds: {
         [`myanimelist/${mediaType}`]: String(malId),
@@ -178,7 +210,10 @@ async function fetchWeb(
   const mediaUrl = new URL(`https://kitsu.io/api/edge/${mediaType}`);
   mediaUrl.searchParams.set('filter[id]', kitsuIds.join(','));
   mediaUrl.searchParams.set('page[limit]', '20');
-  mediaUrl.searchParams.set('include', 'categories');
+  mediaUrl.searchParams.set(
+    'include',
+    mediaType === 'anime' ? 'categories,animeProductions.producer' : 'categories',
+  );
 
   const mediaResponse = await fetch(mediaUrl);
   if (!mediaResponse.ok) {
@@ -212,5 +247,31 @@ export async function enrichMalBatch(
       })
     : await fetchWeb(type, malIds);
 
-  return mapPayload(payload, type);
+  const result = mapPayload(payload, type);
+
+  if (type === 'anime' && isTauriRuntime()) {
+    const missingStudioIds = targets
+      .map((target) => target.malId)
+      .filter((malId) => !(result.get(malId)?.studios?.length));
+
+    if (missingStudioIds.length) {
+      try {
+        const fallback = await invoke<Record<string, string[]>>('fetch_mal_studios', {
+          malIds: missingStudioIds,
+        });
+
+        for (const malId of missingStudioIds) {
+          const media = result.get(malId);
+          const studios = fallback[String(malId)] ?? [];
+          if (media && studios.length) {
+            result.set(malId, { ...media, studios });
+          }
+        }
+      } catch (error) {
+        console.warn('Falha ao complementar estúdios via MyAnimeList público.', error);
+      }
+    }
+  }
+
+  return result;
 }

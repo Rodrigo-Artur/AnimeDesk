@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS media (
   score REAL,
   year INTEGER,
   genres_json TEXT NOT NULL DEFAULT '[]',
+  studios_json TEXT NOT NULL DEFAULT '[]',
   airing_status TEXT,
   cached_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(type, mal_id)

@@ -24,6 +24,7 @@ A primeira base funcional já inclui:
 - Todo item de descoberta precisa ser resolvido para MAL ID real via Kitsu mappings antes de entrar no app.
 - Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
 - Explicações de recomendação 0.2.2: os cards personalizados mostram fatores como afinidade de gêneros, título semelhante da sua biblioteca, nota pública, popularidade e recência.
+- Afinidade por estúdio 0.4.3: `studios[]` é persistido via migration 0002, Kitsu fornece estúdios quando disponíveis e o MyAnimeList público complementa títulos sem `role=studio`; o recomendador usa esse sinal opcional sem penalizar obras sem estúdio conhecido.
 - Normalizador de IDs externos 0.3.0: cada mídia pode carregar vários IDs (myanimelist/anime, myanimelist/manga, kitsu, tmdb, crunchyroll etc.), persistidos em external_media_ids e resolvidos de volta para a mídia local.
 - UI de mappings 0.4.1 em Integrações: selecionar uma obra, inspecionar provider/ID/confidence/verified, adicionar mappings manuais verificados, detectar conflitos e remover mappings auxiliares; o MAL ID canônico é protegido.
 - Persistência de estado 0.3.1: preferências de alertas, cache de descoberta, cache semanal da agenda, marcadores de notificações e timestamps de last-sync usam SQLite no Tauri, com migração automática do localStorage legado e fallback web.
@@ -188,13 +189,12 @@ Cada serviço externo deve permanecer isolado. Se um endpoint privado mudar, ape
 
 ## Migrações SQLite
 
-A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. Não altere migrations já aplicadas: mudanças futuras do banco devem ser adicionadas como `0002_...`, `0003_...` etc. Isso evita incompatibilidade de checksum em instalações existentes.
+A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. A migration `0002_add_studios.sql` adiciona `media.studios_json`. Não altere migrations já aplicadas: mudanças futuras do banco devem ser adicionadas como `0003_...`, `0004_...` etc. Isso evita incompatibilidade de checksum em instalações existentes.
 
 ## Próximas etapas
 
 1. Expandir testes para cache expirado, notification markers e conflitos runtime Tauri/SQLite.
-2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
-3. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
+2. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
 4. Implementar importador de histórico Netflix.
 5. Implementar CrunchyrollProvider somente leitura.
 6. Evoluir a UI de mappings com histórico/auditoria e resolução assistida.

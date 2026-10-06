@@ -64,6 +64,7 @@ function mergeImportedEntry(existing: LibraryEntry, incoming: LibraryEntry): Lib
       status: existing.media.status ?? incoming.media.status,
       year: existing.media.year ?? incoming.media.year,
       genres: existing.media.genres.length ? existing.media.genres : incoming.media.genres,
+      studios: existing.media.studios?.length ? existing.media.studios : incoming.media.studios,
       externalIds: {
         ...(incoming.media.externalIds ?? {}),
         ...(existing.media.externalIds ?? {}),
@@ -95,6 +96,7 @@ function mergeEnrichedMedia(existing: Media, incoming: Media): Media {
     status: incoming.status ?? existing.status,
     synopsis: incoming.synopsis ?? existing.synopsis,
     genres: incoming.genres.length ? incoming.genres : existing.genres,
+    studios: incoming.studios?.length ? incoming.studios : existing.studios,
     year: incoming.year ?? existing.year,
     externalIds: {
       ...(existing.externalIds ?? {}),

@@ -27,6 +27,7 @@ import {
 import './App.css';
 import { ExternalMappingsPanel } from './components/ExternalMappingsPanel';
 import { loadWatchHistory } from './db/database';
+import { getAppState, setAppState } from './services/appState';
 import { getDiscoverHome } from './services/discover';
 import type { DiscoverMedia } from './services/discover';
 import { getMediaDetails, searchAnime, searchManga } from './services/jikan';
@@ -309,7 +310,15 @@ function HomePage() {
     (entry) => entry.status === 'watching' || entry.status === 'reading',
   );
   const librarySignature = entries
-    .map((entry) => `${entry.media.type}:${entry.media.malId}:${entry.status}:${entry.score ?? ''}:${entry.progress}`)
+    .map((entry) => [
+      entry.media.type,
+      entry.media.malId,
+      entry.status,
+      entry.score ?? '',
+      entry.progress,
+      entry.media.genres.join(','),
+      (entry.media.studios ?? []).join(','),
+    ].join(':'))
     .sort()
     .join('|');
 
@@ -1272,6 +1281,7 @@ export default function App() {
   const initializePersistence = useLibraryStore((state) => state.initializePersistence);
   const initialized = useLibraryStore((state) => state.initialized);
   const storageMode = useLibraryStore((state) => state.storageMode);
+  const startEnrichment = useEnrichmentStore((state) => state.start);
   const selectedMedia = useUiStore((state) => state.selectedMedia);
   const pageLabel = useMemo(() => navItems.find((item) => item.id === page)?.label, [page]);
 
@@ -1283,6 +1293,26 @@ export default function App() {
     if (!initialized || !isTauriRuntime()) return;
     return startReleaseWatcher(() => useLibraryStore.getState().entries);
   }, [initialized]);
+
+  useEffect(() => {
+    if (!initialized || !isTauriRuntime()) return;
+    if (useEnrichmentStore.getState().status !== 'idle') return;
+
+    const missingStudios = useLibraryStore.getState().entries.filter(
+      (entry) => entry.media.type === 'anime' && !(entry.media.studios?.length),
+    );
+    if (!missingStudios.length) return;
+
+    const markerKey = 'animedesk-studio-backfill-v1';
+
+    void (async () => {
+      const alreadyAttempted = await getAppState(markerKey);
+      if (alreadyAttempted) return;
+
+      await startEnrichment(missingStudios);
+      await setAppState(markerKey, new Date().toISOString());
+    })();
+  }, [initialized, startEnrichment]);
 
   return (
     <div className="app-shell">

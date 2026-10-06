@@ -34,7 +34,7 @@ async fn kitsu_anime_query(
   response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta invÃ¡lida do Kitsu: {error}"))
+    .map_err(|error| format!("Resposta invÃƒÂ¡lida do Kitsu: {error}"))
 }
 
 #[tauri::command]
@@ -60,7 +60,7 @@ async fn fetch_kitsu_discover(
     let trending_json = trending
       .json::<serde_json::Value>()
       .await
-      .map_err(|error| format!("Resposta invÃ¡lida do Kitsu trending: {error}"))?;
+      .map_err(|error| format!("Resposta invÃƒÂ¡lida do Kitsu trending: {error}"))?;
 
     let ids: Vec<String> = trending_json
       .get("data")
@@ -82,7 +82,7 @@ async fn fetch_kitsu_discover(
       vec![
         ("filter[id]".into(), ids.join(",")),
         ("page[limit]".into(), "20".into()),
-        ("include".into(), "mappings,categories".into()),
+        ("include".into(), "mappings,categories,animeProductions.producer".into()),
       ],
     )
     .await?;
@@ -99,7 +99,7 @@ async fn fetch_kitsu_discover(
 
   let mut params = vec![
     ("page[limit]".into(), "18".into()),
-    ("include".into(), "mappings,categories".into()),
+    ("include".into(), "mappings,categories,animeProductions.producer".into()),
   ];
 
   match kind.as_str() {
@@ -120,13 +120,13 @@ async fn fetch_kitsu_discover(
     "seasonal" => {
       let season = season
         .filter(|value| matches!(value.as_str(), "winter" | "spring" | "summer" | "fall"))
-        .ok_or_else(|| "Temporada invÃ¡lida para descoberta.".to_string())?;
+        .ok_or_else(|| "Temporada invÃƒÂ¡lida para descoberta.".to_string())?;
       let year = year.ok_or_else(|| "Ano ausente para descoberta sazonal.".to_string())?;
       params.push(("filter[season]".into(), season));
       params.push(("filter[seasonYear]".into(), year.to_string()));
       params.push(("sort".into(), "-userCount".into()));
     }
-    _ => return Err("Tipo de descoberta invÃ¡lido.".into()),
+    _ => return Err("Tipo de descoberta invÃƒÂ¡lido.".into()),
   }
 
   kitsu_anime_query(&client, params).await
@@ -138,7 +138,7 @@ async fn enrich_kitsu_by_mal_ids(
   mal_ids: Vec<i64>,
 ) -> Result<serde_json::Value, String> {
   if media_type != "anime" && media_type != "manga" {
-    return Err("Tipo de mÃ­dia invÃ¡lido para enriquecimento.".into());
+    return Err("Tipo de mÃƒÂ­dia invÃƒÂ¡lido para enriquecimento.".into());
   }
 
   if mal_ids.is_empty() {
@@ -149,11 +149,11 @@ async fn enrich_kitsu_by_mal_ids(
   }
 
   if mal_ids.len() > 20 {
-    return Err("O enriquecimento aceita no mÃ¡ximo 20 IDs por lote.".into());
+    return Err("O enriquecimento aceita no mÃƒÂ¡ximo 20 IDs por lote.".into());
   }
 
   if mal_ids.iter().any(|id| *id <= 0) {
-    return Err("A lista contÃ©m MAL ID invÃ¡lido.".into());
+    return Err("A lista contÃƒÂ©m MAL ID invÃƒÂ¡lido.".into());
   }
 
   let client = kitsu_client().await?;
@@ -191,7 +191,7 @@ async fn enrich_kitsu_by_mal_ids(
   let mappings_json = mappings_response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta invÃ¡lida do Kitsu mappings: {error}"))?;
+    .map_err(|error| format!("Resposta invÃƒÂ¡lida do Kitsu mappings: {error}"))?;
 
   let mappings = mappings_json
     .get("data")
@@ -220,12 +220,18 @@ async fn enrich_kitsu_by_mal_ids(
   }
 
   let endpoint = format!("https://kitsu.io/api/edge/{media_type}");
+  let include = if media_type == "anime" {
+    "categories,animeProductions.producer"
+  } else {
+    "categories"
+  };
+
   let media_response = client
     .get(endpoint)
     .query(&[
       ("filter[id]", kitsu_ids.join(",")),
       ("page[limit]", "20".into()),
-      ("include", "categories".into()),
+      ("include", include.into()),
     ])
     .header(reqwest::header::USER_AGENT, USER_AGENT)
     .send()
@@ -242,12 +248,89 @@ async fn enrich_kitsu_by_mal_ids(
   let media_json = media_response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta invÃ¡lida dos metadados Kitsu: {error}"))?;
+    .map_err(|error| format!("Resposta invÃƒÂ¡lida dos metadados Kitsu: {error}"))?;
 
   Ok(serde_json::json!({
     "mappings": mappings,
     "media": media_json
   }))
+}
+
+fn decode_basic_html_entities(value: &str) -> String {
+  value
+    .replace("&amp;", "&")
+    .replace("&quot;", "\"")
+    .replace("&#039;", "'")
+    .replace("&#39;", "'")
+    .replace("&#x27;", "'")
+    .replace("&lt;", "<")
+    .replace("&gt;", ">")
+}
+
+fn extract_mal_studios(html: &str) -> Vec<String> {
+  let marker = r#"<span class="dark_text">Studios:</span>"#;
+  let Some(marker_index) = html.find(marker) else {
+    return Vec::new();
+  };
+
+  let after_marker = &html[marker_index + marker.len()..];
+  let block_end = after_marker.find("</div>").unwrap_or(after_marker.len());
+  let mut rest = &after_marker[..block_end];
+  let mut studios = Vec::new();
+
+  while let Some(title_index) = rest.find("title=\"") {
+    let after_title = &rest[title_index + 7..];
+    let Some(end_index) = after_title.find('"') else {
+      break;
+    };
+
+    let name = decode_basic_html_entities(after_title[..end_index].trim());
+    if !name.is_empty() && !studios.iter().any(|studio| studio == &name) {
+      studios.push(name);
+    }
+
+    rest = &after_title[end_index + 1..];
+  }
+
+  studios
+}
+
+#[tauri::command]
+async fn fetch_mal_studios(mal_ids: Vec<i64>) -> Result<serde_json::Value, String> {
+  if mal_ids.len() > 20 {
+    return Err("A consulta de estÃºdios aceita no mÃ¡ximo 20 MAL IDs por lote.".into());
+  }
+
+  if mal_ids.iter().any(|id| *id <= 0) {
+    return Err("A lista contÃ©m MAL ID invÃ¡lido.".into());
+  }
+
+  let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(12))
+    .build()
+    .map_err(|error| format!("Falha ao preparar cliente MAL: {error}"))?;
+
+  let mut result = serde_json::Map::new();
+
+  for mal_id in mal_ids {
+    let url = format!("https://myanimelist.net/anime/{mal_id}");
+    let studios = match client
+      .get(url)
+      .header(reqwest::header::USER_AGENT, USER_AGENT)
+      .send()
+      .await
+    {
+      Ok(response) if response.status().is_success() => match response.text().await {
+        Ok(html) => extract_mal_studios(&html),
+        Err(_) => Vec::new(),
+      },
+      _ => Vec::new(),
+    };
+
+    result.insert(mal_id.to_string(), serde_json::json!(studios));
+  }
+
+  Ok(serde_json::Value::Object(result))
 }
 
 #[tauri::command]
@@ -256,7 +339,7 @@ async fn search_myanimelist(
   keyword: String,
 ) -> Result<serde_json::Value, String> {
   if media_type != "anime" && media_type != "manga" {
-    return Err("Tipo de mÃ­dia invÃ¡lido.".into());
+    return Err("Tipo de mÃƒÂ­dia invÃƒÂ¡lido.".into());
   }
 
   let keyword = keyword.trim();
@@ -294,7 +377,7 @@ async fn search_myanimelist(
   response
     .json::<serde_json::Value>()
     .await
-    .map_err(|error| format!("Resposta invÃ¡lida do MyAnimeList: {error}"))
+    .map_err(|error| format!("Resposta invÃƒÂ¡lida do MyAnimeList: {error}"))
 }
 
 fn cover_extension(content_type: Option<&str>, url: &str) -> &'static str {
@@ -330,10 +413,10 @@ async fn cache_cover(
   mal_id: i64,
 ) -> Result<String, String> {
   if media_type != "anime" && media_type != "manga" {
-    return Err("Tipo de mÃ­dia invÃ¡lido.".into());
+    return Err("Tipo de mÃƒÂ­dia invÃƒÂ¡lido.".into());
   }
   if mal_id <= 0 {
-    return Err("MAL ID invÃ¡lido.".into());
+    return Err("MAL ID invÃƒÂ¡lido.".into());
   }
   if !(url.starts_with("https://") || url.starts_with("http://")) {
     return Err("A capa precisa usar uma URL HTTP/HTTPS.".into());
@@ -408,14 +491,48 @@ fn show_main_window(app: &tauri::AppHandle) {
   }
 }
 
+#[cfg(test)]
+mod tests {
+  use super::extract_mal_studios;
+
+  #[test]
+  fn extracts_studios_from_mal_html_block() {
+    let html = r#"
+      <div class="spaceit_pad">
+        <span class="dark_text">Studios:</span>
+        <a href="/anime/producer/11/Madhouse" title="Madhouse">Madhouse</a>,
+        <a href="/anime/producer/999/Studio_Test" title="Studio &amp; Test">Studio &amp; Test</a>
+      </div>
+    "#;
+
+    assert_eq!(
+      extract_mal_studios(html),
+      vec!["Madhouse".to_string(), "Studio & Test".to_string()]
+    );
+  }
+
+  #[test]
+  fn returns_empty_when_mal_has_no_studio_block() {
+    assert!(extract_mal_studios("<html><body>sem estudio</body></html>").is_empty());
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let migrations = vec![Migration {
-    version: 1,
-    description: "initial_animedesk_schema",
-    sql: include_str!("../migrations/0001_initial.sql"),
-    kind: MigrationKind::Up,
-  }];
+  let migrations = vec![
+    Migration {
+      version: 1,
+      description: "initial_animedesk_schema",
+      sql: include_str!("../migrations/0001_initial.sql"),
+      kind: MigrationKind::Up,
+    },
+    Migration {
+      version: 2,
+      description: "add_studios_to_media",
+      sql: include_str!("../migrations/0002_add_studios.sql"),
+      kind: MigrationKind::Up,
+    },
+  ];
 
   tauri::Builder::default()
     .plugin(
@@ -478,7 +595,8 @@ pub fn run() {
       cache_cover,
       search_myanimelist,
       fetch_kitsu_discover,
-      enrich_kitsu_by_mal_ids
+      enrich_kitsu_by_mal_ids,
+      fetch_mal_studios
     ])
     .on_window_event(|window, event| {
       if let WindowEvent::CloseRequested { api, .. } = event {

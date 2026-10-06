@@ -83,6 +83,7 @@ type KitsuAnimeResource = {
   relationships?: {
     mappings?: { data?: KitsuRelationshipRef[] };
     categories?: { data?: KitsuRelationshipRef[] };
+    animeProductions?: { data?: KitsuRelationshipRef[] };
   };
 };
 
@@ -93,6 +94,11 @@ type KitsuIncludedResource = {
     externalSite?: string;
     externalId?: string;
     title?: string;
+    name?: string;
+    role?: string;
+  };
+  relationships?: {
+    producer?: { data?: KitsuRelationshipRef | null };
   };
 };
 
@@ -170,10 +176,16 @@ function normalizeGenreName(value: string): string {
   return aliases[normalized] ?? normalized;
 }
 
+function normalizeStudioName(value: string): string {
+  return value.trim().toLocaleLowerCase('en-US').replace(/\s+/g, ' ');
+}
+
 function mapKitsuResponse(response: KitsuResponse): DiscoverMedia[] {
   const included = response.included ?? [];
   const mappingById = new Map<string, number>();
   const categoryById = new Map<string, string>();
+  const producerById = new Map<string, string>();
+  const productionById = new Map<string, { role?: string; producerId?: string }>();
 
   for (const resource of included) {
     if (
@@ -188,6 +200,17 @@ function mapKitsuResponse(response: KitsuResponse): DiscoverMedia[] {
 
     if (resource.type === 'categories' && resource.attributes?.title) {
       categoryById.set(resource.id, resource.attributes.title);
+    }
+
+    if (resource.type === 'producers' && resource.attributes?.name) {
+      producerById.set(resource.id, resource.attributes.name);
+    }
+
+    if (resource.type === 'animeProductions') {
+      productionById.set(resource.id, {
+        role: resource.attributes?.role,
+        producerId: resource.relationships?.producer?.data?.id,
+      });
     }
   }
 
@@ -205,6 +228,13 @@ function mapKitsuResponse(response: KitsuResponse): DiscoverMedia[] {
 
     const genres = (item.relationships?.categories?.data ?? [])
       .map((ref) => categoryById.get(ref.id))
+      .filter((value): value is string => Boolean(value))
+      .filter((value, index, all) => all.indexOf(value) === index);
+
+    const studios = (item.relationships?.animeProductions?.data ?? [])
+      .map((ref) => productionById.get(ref.id))
+      .filter((production) => production?.role === 'studio' && Boolean(production.producerId))
+      .map((production) => producerById.get(production?.producerId ?? ''))
       .filter((value): value is string => Boolean(value))
       .filter((value, index, all) => all.indexOf(value) === index);
 
@@ -230,6 +260,7 @@ function mapKitsuResponse(response: KitsuResponse): DiscoverMedia[] {
       status: item.attributes.status ?? undefined,
       synopsis: item.attributes.synopsis || item.attributes.description || undefined,
       genres,
+      studios,
       year: yearFromDate(item.attributes.startDate),
       provider: 'Kitsu',
       kitsuId: item.id,
@@ -264,7 +295,7 @@ async function fetchKitsuWeb(
     const url = new URL(`${KITSU_BASE}/anime`);
     url.searchParams.set('filter[id]', ids.join(','));
     url.searchParams.set('page[limit]', '20');
-    url.searchParams.set('include', 'mappings,categories');
+    url.searchParams.set('include', 'mappings,categories,animeProductions.producer');
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Kitsu HTTP ${response.status}`);
     const payload = await response.json() as KitsuResponse;
@@ -278,7 +309,7 @@ async function fetchKitsuWeb(
 
   const url = new URL(`${KITSU_BASE}/anime`);
   url.searchParams.set('page[limit]', '18');
-  url.searchParams.set('include', 'mappings,categories');
+  url.searchParams.set('include', 'mappings,categories,animeProductions.producer');
 
   if (kind === 'popular') url.searchParams.set('sort', '-userCount');
   if (kind === 'top') url.searchParams.set('sort', '-averageRating');
@@ -387,9 +418,31 @@ function buildGenreProfile(library: LibraryEntry[]): Map<string, number> {
   return profile;
 }
 
+function buildStudioProfile(library: LibraryEntry[]): Map<string, number> {
+  const profile = new Map<string, number>();
+
+  for (const entry of library) {
+    if (entry.media.type !== 'anime' || !entry.media.studios?.length) continue;
+
+    const scoreSignal = entry.score
+      ? (entry.score - 5) / 5
+      : entry.status === 'completed'
+        ? 0.35
+        : 0;
+    const weight = libraryStatusWeight(entry) + scoreSignal;
+
+    for (const studio of new Set(entry.media.studios.map(normalizeStudioName).filter(Boolean))) {
+      profile.set(studio, (profile.get(studio) ?? 0) + weight);
+    }
+  }
+
+  return profile;
+}
+
 function recommendationScore(
   item: DiscoverMedia,
   genreProfile: Map<string, number>,
+  studioProfile: Map<string, number>,
   libraryById: Map<number, LibraryEntry>,
 ): number {
   const existing = libraryById.get(item.malId);
@@ -416,6 +469,13 @@ function recommendationScore(
     ? Math.max(-1, Math.min(1.5, genreValues.reduce((sum, value) => sum + value, 0) / genreValues.length))
     : 0;
 
+  const studioValues = (item.studios ?? [])
+    .map((studio) => studioProfile.get(normalizeStudioName(studio)) ?? 0)
+    .filter((value) => value !== 0);
+  const studioAffinity = studioValues.length
+    ? Math.max(-1, Math.min(1.5, studioValues.reduce((sum, value) => sum + value, 0) / studioValues.length))
+    : 0;
+
   let recency = 0;
   if (item.startDate) {
     const start = new Date(item.startDate).getTime();
@@ -424,13 +484,22 @@ function recommendationScore(
     else if (ageDays <= 1200) recency = 0.4;
   }
 
-  const personalized =
-    genreAffinity * 0.42 +
-    publicScore * 0.28 +
-    popularitySignal * 0.2 +
-    recency * 0.1;
+  if (!studioValues.length) {
+    return (
+      genreAffinity * 0.42 +
+      publicScore * 0.28 +
+      popularitySignal * 0.2 +
+      recency * 0.1
+    );
+  }
 
-  return personalized;
+  return (
+    genreAffinity * 0.34 +
+    studioAffinity * 0.16 +
+    publicScore * 0.25 +
+    popularitySignal * 0.15 +
+    recency * 0.1
+  );
 }
 
 function bestReferenceTitle(
@@ -438,7 +507,8 @@ function bestReferenceTitle(
   library: LibraryEntry[],
 ): string | null {
   const itemGenres = new Set(item.genres.map(normalizeGenreName));
-  if (!itemGenres.size) return null;
+  const itemStudios = new Set((item.studios ?? []).map(normalizeStudioName));
+  if (!itemGenres.size && !itemStudios.size) return null;
 
   let best: { title: string; score: number } | null = null;
 
@@ -447,14 +517,18 @@ function bestReferenceTitle(
     if (entry.status === 'planned' || entry.status === 'dropped') continue;
     if (entry.media.malId === item.malId) continue;
 
-    const overlap = entry.media.genres
+    const genreOverlap = entry.media.genres
       .map(normalizeGenreName)
       .filter((genre) => itemGenres.has(genre)).length;
+    const studioOverlap = (entry.media.studios ?? [])
+      .map(normalizeStudioName)
+      .filter((studio) => itemStudios.has(studio)).length;
 
-    if (!overlap) continue;
+    if (!genreOverlap && !studioOverlap) continue;
 
     const score =
-      overlap * 10 +
+      genreOverlap * 10 +
+      studioOverlap * 8 +
       (entry.score ?? 0) +
       Math.max(0, libraryStatusWeight(entry)) * 2;
 
@@ -472,6 +546,7 @@ function bestReferenceTitle(
 function buildRecommendationReasons(
   item: DiscoverMedia,
   genreProfile: Map<string, number>,
+  studioProfile: Map<string, number>,
   library: LibraryEntry[],
 ): string[] {
   const reasons: string[] = [];
@@ -490,6 +565,18 @@ function buildRecommendationReasons(
     reasons.push(`Combina com seu interesse em ${matchingGenres[0]}`);
   } else if (matchingGenres.length >= 2) {
     reasons.push(`Combina com ${matchingGenres[0]} + ${matchingGenres[1]}`);
+  }
+
+  const matchingStudio = (item.studios ?? [])
+    .map((studio) => ({
+      label: studio,
+      weight: studioProfile.get(normalizeStudioName(studio)) ?? 0,
+    }))
+    .filter((studio) => studio.weight > 0.2)
+    .sort((a, b) => b.weight - a.weight)[0];
+
+  if (matchingStudio) {
+    reasons.push(`Você costuma gostar de ${matchingStudio.label}`);
   }
 
   const referenceTitle = bestReferenceTitle(item, library);
@@ -535,12 +622,23 @@ function rankRecommendations(
       .map((entry) => [entry.media.malId, entry]),
   );
   const genreProfile = buildGenreProfile(library);
+  const studioProfile = buildStudioProfile(library);
 
   return uniqueByMalId(candidates)
     .map((item) => ({
       ...item,
-      recommendationScore: recommendationScore(item, genreProfile, libraryById),
-      recommendationReasons: buildRecommendationReasons(item, genreProfile, library),
+      recommendationScore: recommendationScore(
+        item,
+        genreProfile,
+        studioProfile,
+        libraryById,
+      ),
+      recommendationReasons: buildRecommendationReasons(
+        item,
+        genreProfile,
+        studioProfile,
+        library,
+      ),
     }))
     .filter((item) => (item.recommendationScore ?? -100) > -50)
     .sort((a, b) => (b.recommendationScore ?? 0) - (a.recommendationScore ?? 0))

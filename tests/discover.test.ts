@@ -13,6 +13,7 @@ function candidate(
   genres: string[],
   score: number,
   userCount = 20_000,
+  studios: string[] = [],
 ): DiscoverMedia {
   return {
     id: malId,
@@ -20,6 +21,7 @@ function candidate(
     type: 'anime',
     title,
     genres,
+    studios,
     score,
     provider: 'Kitsu',
     kitsuId: String(10_000 + malId),
@@ -94,6 +96,50 @@ describe('recomendação local', () => {
     expect(result.recommendations[0].malId).toBe(100);
     expect(result.recommendations[0].recommendationReasons?.join(' ')).toContain('Fantasy');
     expect(result.recommendations[0].recommendationReasons?.join(' ')).toContain('Frieren');
+  });
+
+  it('usa afinidade por estúdio quando o metadado existe dos dois lados', async () => {
+    const library: LibraryEntry[] = [
+      {
+        media: {
+          id: 999,
+          malId: 999,
+          type: 'anime',
+          title: 'Favorito Madhouse',
+          genres: ['Drama'],
+          studios: ['MADHOUSE'],
+        },
+        status: 'completed',
+        progress: 12,
+        score: 10,
+        updatedAt: '2026-10-01T00:00:00Z',
+      },
+    ];
+
+    const otherStudio = candidate(
+      400,
+      'Outro Estúdio',
+      ['Drama'],
+      8.2,
+      10_000,
+      ['Bones'],
+    );
+    const matchingStudio = candidate(
+      401,
+      'Mesmo Estúdio',
+      ['Drama'],
+      8.2,
+      10_000,
+      ['Madhouse'],
+    );
+
+    const result = await getDiscoverHome(
+      library,
+      new FakeDiscoverProvider([otherStudio, matchingStudio]),
+    );
+
+    expect(result.recommendations[0].malId).toBe(401);
+    expect(result.recommendations[0].recommendationReasons?.join(' ')).toContain('Madhouse');
   });
 
   it('não recomenda item que já está sendo gerenciado na biblioteca', async () => {

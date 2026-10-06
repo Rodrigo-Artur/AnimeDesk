@@ -23,6 +23,7 @@ type LibraryRow = {
   media_score: number | null;
   year: number | null;
   genres_json: string;
+  studios_json: string;
   airing_status: string | null;
   library_status: LibraryEntry['status'];
   progress: number;
@@ -92,6 +93,7 @@ function rowToEntry(
     score: row.media_score,
     year: row.year,
     genres: safeGenres(row.genres_json),
+    studios: safeGenres(row.studios_json),
     status: row.airing_status ?? undefined,
     externalIds: {
       [`myanimelist/${row.type}`]: String(row.mal_id),
@@ -126,6 +128,7 @@ export async function loadNativeLibrary(): Promise<LibraryEntry[]> {
       m.score AS media_score,
       m.year,
       m.genres_json,
+      m.studios_json,
       m.airing_status,
       l.status AS library_status,
       l.progress,
@@ -225,8 +228,8 @@ export async function saveNativeEntry(entry: LibraryEntry): Promise<void> {
   await db.execute(
     `INSERT INTO media (
       type, title, title_english, mal_id, cover_url, synopsis,
-      total_episodes, total_chapters, score, year, genres_json, airing_status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      total_episodes, total_chapters, score, year, genres_json, studios_json, airing_status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
     ON CONFLICT(type, mal_id) DO UPDATE SET
       type=excluded.type,
       title=excluded.title,
@@ -238,6 +241,7 @@ export async function saveNativeEntry(entry: LibraryEntry): Promise<void> {
       score=excluded.score,
       year=excluded.year,
       genres_json=excluded.genres_json,
+      studios_json=excluded.studios_json,
       airing_status=excluded.airing_status,
       cached_at=CURRENT_TIMESTAMP`,
     [
@@ -252,6 +256,7 @@ export async function saveNativeEntry(entry: LibraryEntry): Promise<void> {
       media.score ?? null,
       media.year ?? null,
       JSON.stringify(media.genres),
+      JSON.stringify(media.studios ?? []),
       media.status ?? null,
     ],
   );
