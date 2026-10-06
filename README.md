@@ -25,9 +25,10 @@ A primeira base funcional já inclui:
 - Cache local da última vitrine de descoberta por até 7 dias, com recálculo das recomendações usando a biblioteca atual.
 - Explicações de recomendação 0.2.2: os cards personalizados mostram fatores como afinidade de gêneros, título semelhante da sua biblioteca, nota pública, popularidade e recência.
 - Normalizador de IDs externos 0.3.0: cada mídia pode carregar vários IDs (myanimelist/anime, myanimelist/manga, kitsu, tmdb, crunchyroll etc.), persistidos em external_media_ids e resolvidos de volta para a mídia local.
+- UI de mappings 0.4.1 em Integrações: selecionar uma obra, inspecionar provider/ID/confidence/verified, adicionar mappings manuais verificados, detectar conflitos e remover mappings auxiliares; o MAL ID canônico é protegido.
 - Persistência de estado 0.3.1: preferências de alertas, cache de descoberta, cache semanal da agenda, marcadores de notificações e timestamps de last-sync usam SQLite no Tauri, com migração automática do localStorage legado e fallback web.
 - Releases da biblioteca encontrados pela Agenda também são normalizados na tabela `releases`, com deduplicação explícita.
-- Testes automatizados 0.3.2 com Vitest + happy-dom; na 0.4.0 a suíte soma 17 testes cobrindo normalizador, parser MAL, enriquecimento Kitsu, recomendações, Agenda e estatísticas.
+- Testes automatizados com Vitest + happy-dom; na 0.4.1 a suíte soma 18 testes cobrindo normalizador/mappings, parser MAL, enriquecimento Kitsu, recomendações, Agenda e estatísticas.
 - Parser XML do MAL endurecido para usar APIs XML nativas (`getElementsByTagName`) em vez de depender de seletores CSS.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
 - Tela **Histórico e estatísticas** 0.4.0 baseada no SQLite: totais de anime/mangá, concluídos/em andamento/planejados, episódios, capítulos, horas estimadas, nota média pessoal, gêneros, atividade dos últimos 6 meses, origem por provider e linha do tempo recente.
@@ -191,11 +192,11 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Expandir testes para store de biblioteca, cache expirado, notification markers e conflitos de IDs.
+1. Expandir testes para store de biblioteca, cache expirado e notification markers.
 2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
-3. Criar UI de inspeção/conflitos de mappings externos.
-4. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
-5. Implementar importador de histórico Netflix.
-6. Implementar CrunchyrollProvider somente leitura.
+3. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
+4. Implementar importador de histórico Netflix.
+5. Implementar CrunchyrollProvider somente leitura.
+6. Evoluir a UI de mappings com histórico/auditoria e resolução assistida.
 7. Evoluir estatísticas com filtros por período/provider e duração real quando providers externos fornecerem esse dado.
 8. Polir ícone, CSP, identifier, instalador e atualização automática.

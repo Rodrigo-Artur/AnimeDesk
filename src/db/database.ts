@@ -46,6 +46,15 @@ export type ResolvedExternalMedia = {
   verified: boolean;
 };
 
+export type ExternalMediaMapping = {
+  provider: string;
+  externalId: string;
+  externalTitle?: string | null;
+  confidence: number | null;
+  verified: boolean;
+  canonical: boolean;
+};
+
 async function getDatabase(): Promise<Database | null> {
   if (!isTauriRuntime()) return null;
 
@@ -164,10 +173,20 @@ async function upsertExternalMediaId(
   const targetMediaId = targetRows[0]?.id;
   if (!targetMediaId) return;
 
-  const existingRows = await db.select<Array<{ media_id: number }>>(
-    `SELECT media_id
-     FROM external_media_ids
-     WHERE provider = $1 AND external_id = $2
+  const existingRows = await db.select<Array<{
+    media_id: number;
+    type: Media['type'];
+    mal_id: number;
+    title: string;
+  }>>(
+    `SELECT
+       e.media_id,
+       m.type,
+       m.mal_id,
+       m.title
+     FROM external_media_ids e
+     INNER JOIN media m ON m.id = e.media_id
+     WHERE e.provider = $1 AND e.external_id = $2
      LIMIT 1`,
     [cleanProvider, cleanExternalId],
   );
@@ -175,7 +194,7 @@ async function upsertExternalMediaId(
   const existing = existingRows[0];
   if (existing && existing.media_id !== targetMediaId) {
     throw new Error(
-      `O ID externo ${cleanProvider}:${cleanExternalId} já está ligado a outra mídia.`,
+      `O ID ${cleanProvider}:${cleanExternalId} já pertence a ${existing.title} (${existing.type} MAL ${existing.mal_id}).`,
     );
   }
 
@@ -283,6 +302,95 @@ export async function linkExternalMediaId(
     externalId,
     confidence,
     verified,
+  );
+}
+
+export async function getExternalMediaMappings(
+  type: Media['type'],
+  malId: number,
+): Promise<ExternalMediaMapping[]> {
+  const db = await getDatabase();
+  const canonicalProvider = `myanimelist/${type}`;
+
+  if (!db) {
+    return [{
+      provider: canonicalProvider,
+      externalId: String(malId),
+      externalTitle: null,
+      confidence: 1,
+      verified: true,
+      canonical: true,
+    }];
+  }
+
+  const rows = await db.select<Array<{
+    provider: string;
+    external_id: string;
+    external_title: string | null;
+    confidence: number | null;
+    verified: number;
+  }>>(
+    `SELECT
+       e.provider,
+       e.external_id,
+       e.external_title,
+       e.confidence,
+       e.verified
+     FROM external_media_ids e
+     INNER JOIN media m ON m.id = e.media_id
+     WHERE m.type = $1 AND m.mal_id = $2
+     ORDER BY CASE WHEN e.provider = $3 THEN 0 ELSE 1 END, e.provider`,
+    [type, malId, canonicalProvider],
+  );
+
+  const mappings = rows.map((row) => ({
+    provider: row.provider,
+    externalId: row.external_id,
+    externalTitle: row.external_title,
+    confidence: row.confidence,
+    verified: Boolean(row.verified),
+    canonical: row.provider === canonicalProvider,
+  }));
+
+  if (!mappings.some((mapping) => mapping.provider === canonicalProvider)) {
+    mappings.unshift({
+      provider: canonicalProvider,
+      externalId: String(malId),
+      externalTitle: null,
+      confidence: 1,
+      verified: true,
+      canonical: true,
+    });
+  }
+
+  return mappings;
+}
+
+export async function unlinkExternalMediaId(
+  type: Media['type'],
+  malId: number,
+  provider: string,
+  externalId: string,
+): Promise<void> {
+  const db = await getDatabase();
+  if (!db) return;
+
+  const cleanProvider = provider.trim().toLowerCase();
+  const canonicalProvider = `myanimelist/${type}`;
+  if (cleanProvider === canonicalProvider) {
+    throw new Error('O MAL ID canônico não pode ser removido.');
+  }
+
+  await db.execute(
+    `DELETE FROM external_media_ids
+     WHERE provider = $1
+       AND external_id = $2
+       AND media_id = (
+         SELECT id FROM media
+         WHERE type = $3 AND mal_id = $4
+         LIMIT 1
+       )`,
+    [cleanProvider, externalId.trim(), type, malId],
   );
 }
 

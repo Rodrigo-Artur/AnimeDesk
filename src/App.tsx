@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import './App.css';
+import { ExternalMappingsPanel } from './components/ExternalMappingsPanel';
 import { loadWatchHistory } from './db/database';
 import { getDiscoverHome } from './services/discover';
 import type { DiscoverMedia } from './services/discover';
@@ -1123,6 +1124,8 @@ function IntegrationsPage() {
           </div>
         )}
       </div>
+
+      <ExternalMappingsPanel />
 
       <div className="integration-grid">
         <div className="integration-card live"><div className="service-icon">MAL</div><div><h3>MyAnimeList</h3><p>Busca direta no desktop, identidade MAL ID e importação da biblioteca por XML/XML.GZ.</p></div><span>ATIVO</span></div>

@@ -1,8 +1,11 @@
 import {
   getExternalMediaIds,
+  getExternalMediaMappings,
   linkExternalMediaId,
   resolveExternalMediaId,
+  unlinkExternalMediaId,
 } from '../db/database';
+import type { ExternalMediaMapping } from '../db/database';
 import { isTauriRuntime } from './platform';
 import type { Media, MediaType } from '../types/media';
 
@@ -99,6 +102,38 @@ export async function rememberExternalId(
   }
 
   return enriched;
+}
+
+export async function knownExternalMappings(
+  media: Pick<Media, 'type' | 'malId'>,
+): Promise<ExternalMediaMapping[]> {
+  if (!isTauriRuntime()) {
+    return [{
+      provider: canonicalMalProvider(media.type),
+      externalId: String(media.malId),
+      externalTitle: null,
+      confidence: 1,
+      verified: true,
+      canonical: true,
+    }];
+  }
+
+  return getExternalMediaMappings(media.type, media.malId);
+}
+
+export async function forgetExternalId(
+  media: Pick<Media, 'type' | 'malId'>,
+  provider: string,
+  externalId: string,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  const normalizedProvider = normalizeProviderName(provider, media.type);
+  await unlinkExternalMediaId(
+    media.type,
+    media.malId,
+    normalizedProvider,
+    externalId,
+  );
 }
 
 export async function knownExternalIds(

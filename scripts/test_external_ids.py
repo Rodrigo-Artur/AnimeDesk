@@ -89,4 +89,44 @@ assert len(namespace_rows) == 2
 assert namespace_rows[0][2] != namespace_rows[1][2]
 assert resolved[1] == 52991
 assert tmdb[0] == 1.0
+
+# Um provider + external_id não pode apontar para duas mídias.
+conflict_detected = False
+other_media_id = con.execute(
+    "SELECT id FROM media WHERE type='anime' AND mal_id=1"
+).fetchone()[0]
+try:
+    con.execute(
+        """
+        INSERT INTO external_media_ids(
+          media_id,provider,external_id,external_title,confidence,verified
+        ) VALUES(?,?,?,?,?,?)
+        """,
+        (other_media_id, "kitsu", "46474", "Anime #1", 1.0, 1),
+    )
+    con.commit()
+except sqlite3.IntegrityError:
+    conflict_detected = True
+    con.rollback()
+
+assert conflict_detected
+print("mapping_conflict", "OK")
+
+# Remover mapping auxiliar não remove o namespace MAL canônico.
+con.execute(
+    "DELETE FROM external_media_ids WHERE provider='kitsu' AND external_id='46474'"
+)
+remaining = con.execute(
+    """
+    SELECT provider,external_id
+    FROM external_media_ids e
+    JOIN media m ON m.id=e.media_id
+    WHERE m.type='anime' AND m.mal_id=52991
+    ORDER BY provider
+    """
+).fetchall()
+assert ("myanimelist/anime", "52991") in remaining
+assert ("kitsu", "46474") not in remaining
+print("auxiliary_unlink", remaining)
+
 con.close()

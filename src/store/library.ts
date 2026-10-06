@@ -30,6 +30,11 @@ type LibraryStore = {
   incrementProgress: (malId: number, type: Media['type']) => void;
   cacheCover: (malId: number, type: Media['type']) => Promise<boolean>;
   applyEnrichment: (media: Media) => Promise<boolean>;
+  setExternalIds: (
+    malId: number,
+    type: Media['type'],
+    externalIds: Record<string, string>,
+  ) => Promise<boolean>;
   importEntries: (entries: LibraryEntry[]) => Promise<LibraryImportReport>;
 };
 
@@ -294,6 +299,43 @@ export const useLibraryStore = create<LibraryStore>()(
           return true;
         } catch (error) {
           console.error('Falha ao aplicar enriquecimento:', error);
+          return false;
+        }
+      },
+
+      setExternalIds: async (malId, type, externalIds) => {
+        const current = get().entries.find(
+          (entry) => entry.media.malId === malId && entry.media.type === type,
+        );
+        if (!current) return false;
+
+        const updated: LibraryEntry = {
+          ...current,
+          media: {
+            ...current.media,
+            externalIds: {
+              ...externalIds,
+              [`myanimelist/${type}`]: String(malId),
+            },
+          },
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          if (isTauriRuntime()) {
+            await saveNativeEntry(updated);
+          }
+
+          set((state) => ({
+            entries: state.entries.map((entry) =>
+              entry.media.malId === malId && entry.media.type === type
+                ? updated
+                : entry,
+            ),
+          }));
+          return true;
+        } catch (error) {
+          console.error('Falha ao atualizar IDs externos:', error);
           return false;
         }
       },

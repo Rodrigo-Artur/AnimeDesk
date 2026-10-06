@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canonicalMalProvider,
   canonicalMediaKey,
+  knownExternalMappings,
   normalizeProviderName,
   withExternalId,
 } from '../src/services/normalizer';
@@ -55,5 +56,20 @@ describe('normalizador de IDs externos', () => {
   it('ignora ID vazio sem mutar a mídia', () => {
     const initial = media('anime', 52991);
     expect(withExternalId(initial, 'kitsu', '   ')).toBe(initial);
+  });
+
+  it('expõe o MAL canônico como mapping verificado no fallback web', async () => {
+    const mappings = await knownExternalMappings(media('manga', 2));
+
+    expect(mappings).toEqual([
+      {
+        provider: 'myanimelist/manga',
+        externalId: '2',
+        externalTitle: null,
+        confidence: 1,
+        verified: true,
+        canonical: true,
+      },
+    ]);
   });
 });

@@ -1252,3 +1252,237 @@ main { min-width: 0; }
     grid-column: 2;
   }
 }
+
+.mapping-panel {
+  margin-bottom: 22px;
+  overflow: hidden;
+  border: 1px solid #2d3445;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, .07), transparent 30%),
+    var(--panel);
+}
+
+.mapping-panel-head {
+  min-height: 96px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 17px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mapping-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, .12);
+}
+
+.mapping-panel-head span,
+.mapping-toolbar label > span {
+  display: block;
+  color: #8b9bc4;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.mapping-panel-head h2 {
+  margin: 4px 0 5px;
+  font-size: 16px;
+}
+
+.mapping-panel-head p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.mapping-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mapping-toolbar label {
+  min-width: 0;
+}
+
+.mapping-toolbar select,
+.mapping-toolbar input {
+  width: 100%;
+  height: 36px;
+  margin-top: 6px;
+  padding: 0 10px;
+  border: 1px solid #2d3445;
+  border-radius: 8px;
+  outline: 0;
+  color: #d9deea;
+  background: #151925;
+  font-size: 10px;
+}
+
+.mapping-toolbar select:focus,
+.mapping-toolbar input:focus {
+  border-color: #5f6d93;
+}
+
+.mapping-add-form {
+  display: grid;
+  grid-template-columns: minmax(130px, .7fr) minmax(180px, 1fr) auto;
+  gap: 9px;
+  align-items: end;
+}
+
+.mapping-add-form .button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.mapping-message,
+.mapping-empty {
+  padding: 11px 18px;
+  border-bottom: 1px solid var(--border);
+  color: #aab2c3;
+  background: rgba(9, 12, 18, .24);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.mapping-message {
+  color: #c8d3ff;
+}
+
+.mapping-list {
+  display: grid;
+}
+
+.mapping-row {
+  min-height: 60px;
+  display: grid;
+  grid-template-columns: minmax(140px, 1.2fr) minmax(110px, .8fr) minmax(180px, 1fr) 34px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mapping-row:last-child {
+  border-bottom: 0;
+}
+
+.mapping-row.canonical {
+  background: rgba(99, 102, 241, .045);
+}
+
+.mapping-provider strong,
+.mapping-provider span {
+  display: block;
+}
+
+.mapping-provider strong {
+  font-size: 10px;
+}
+
+.mapping-provider span {
+  margin-top: 3px;
+  color: #70798b;
+  font-size: 8px;
+}
+
+.mapping-row code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c5ccda;
+  font-size: 9px;
+}
+
+.mapping-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.mapping-badges > span {
+  min-height: 23px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #2e3545;
+  border-radius: 6px;
+  color: #8d96a9;
+  background: #171b25;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .4px;
+}
+
+.mapping-badges .canonical-badge {
+  border-color: rgba(99, 102, 241, .32);
+  color: #c7d2fe;
+  background: rgba(99, 102, 241, .08);
+}
+
+.mapping-badges .verified-badge {
+  border-color: rgba(52, 211, 153, .25);
+  color: #86efac;
+  background: rgba(16, 185, 129, .06);
+}
+
+.mapping-remove {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #313849;
+  border-radius: 8px;
+  color: #9a6f78;
+  background: #171b25;
+}
+
+.mapping-remove:hover:not(:disabled) {
+  color: #fda4af;
+  border-color: rgba(244, 63, 94, .32);
+}
+
+.mapping-remove:disabled {
+  opacity: .28;
+  cursor: not-allowed;
+}
+
+@media (max-width: 850px) {
+  .mapping-add-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mapping-add-form .button {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+
+  .mapping-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .mapping-row code,
+  .mapping-badges {
+    grid-column: 1 / 2;
+  }
+
+  .mapping-remove {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+  }
+}
