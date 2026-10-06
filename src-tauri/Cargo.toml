@@ -1,6 +1,6 @@
 [package]
 name = "animedesk"
-version = "0.4.3"
+version = "0.5.0"
 description = "Desktop anime and manga tracker with schedules, alerts and streaming integrations."
 authors = ["AnimeDesk"]
 license = ""
@@ -27,3 +27,6 @@ tauri-plugin-sql = { version = "2.5.0", features = ["sqlite"] }
 tauri-plugin-notification = "2.5.1"
 tauri-plugin-autostart = "2.7.0"
 reqwest = { version = "0.12", features = ["json"] }
+keyring = { version = "3.6", features = ["windows-native"] }
+rand = "0.8"
+url = "2"

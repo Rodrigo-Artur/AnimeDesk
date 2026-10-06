@@ -1,3 +1,12 @@
+mod mal_oauth;
+
+use mal_oauth::{
+  mal_fetch_user_list,
+  mal_oauth_login,
+  mal_oauth_logout,
+  mal_oauth_status,
+};
+
 use tauri::{
   menu::{Menu, MenuItem},
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -596,7 +605,11 @@ pub fn run() {
       search_myanimelist,
       fetch_kitsu_discover,
       enrich_kitsu_by_mal_ids,
-      fetch_mal_studios
+      fetch_mal_studios,
+      mal_oauth_status,
+      mal_oauth_login,
+      mal_oauth_logout,
+      mal_fetch_user_list
     ])
     .on_window_event(|window, event| {
       if let WindowEvent::CloseRequested { api, .. } = event {

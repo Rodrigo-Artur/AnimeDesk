@@ -34,6 +34,16 @@ import { getMediaDetails, searchAnime, searchManga } from './services/jikan';
 import { parseMalExportXml, readMalExportFile } from './services/malImport';
 import type { MalImportPreview } from './services/malImport';
 import {
+  fetchMalAccountLibrary,
+  getMalAccountStatus,
+  getMalClientId,
+  loginMalAccount,
+  logoutMalAccount,
+  MAL_REDIRECT_URI,
+  setMalClientId,
+} from './services/malOAuth';
+import type { MalAccountStatus } from './services/malOAuth';
+import {
   getAutostartEnabled,
   sendNativeTestNotification,
   setAutostartEnabled,
@@ -937,6 +947,7 @@ function AgendaPage() {
 }
 
 function IntegrationsPage() {
+  const native = isTauriRuntime();
   const entries = useLibraryStore((state) => state.entries);
   const importEntries = useLibraryStore((state) => state.importEntries);
   const enrichmentStatus = useEnrichmentStore((state) => state.status);
@@ -954,6 +965,118 @@ function IntegrationsPage() {
   const [malFileName, setMalFileName] = useState('');
   const [malImporting, setMalImporting] = useState(false);
   const [malMessage, setMalMessage] = useState('');
+  const [malClientIdInput, setMalClientIdInput] = useState('');
+  const [malAccount, setMalAccount] = useState<MalAccountStatus | null>(null);
+  const [malOauthBusy, setMalOauthBusy] = useState(false);
+  const [malOauthMessage, setMalOauthMessage] = useState('');
+
+  useEffect(() => {
+    if (!native) return;
+    let cancelled = false;
+
+    void getMalClientId()
+      .then(async (clientId) => {
+        if (cancelled) return;
+        setMalClientIdInput(clientId);
+        const status = await getMalAccountStatus(clientId);
+        if (!cancelled) setMalAccount(status);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setMalOauthMessage(
+            error instanceof Error ? error.message : 'Falha ao ler configuração OAuth do MAL.',
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [native]);
+
+  const saveMalOauthConfig = async () => {
+    setMalOauthBusy(true);
+    setMalOauthMessage('');
+    try {
+      await setMalClientId(malClientIdInput);
+      const status = await getMalAccountStatus(malClientIdInput);
+      setMalAccount(status);
+      setMalOauthMessage(
+        malClientIdInput.trim()
+          ? 'Client ID salvo localmente.'
+          : 'Client ID removido.',
+      );
+    } catch (error) {
+      setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao salvar Client ID.');
+    } finally {
+      setMalOauthBusy(false);
+    }
+  };
+
+  const connectMalOauth = async () => {
+    const clientId = malClientIdInput.trim();
+    if (!clientId) {
+      setMalOauthMessage('Informe o Client ID da aplicação MyAnimeList primeiro.');
+      return;
+    }
+
+    setMalOauthBusy(true);
+    setMalOauthMessage('Abrindo o navegador para autorização do MyAnimeList…');
+    try {
+      await setMalClientId(clientId);
+      const status = await loginMalAccount(clientId);
+      setMalAccount(status);
+      setMalOauthMessage(
+        status.name
+          ? `Conta conectada: ${status.name}.`
+          : 'Conta MyAnimeList conectada.',
+      );
+    } catch (error) {
+      setMalOauthMessage(error instanceof Error ? error.message : 'Falha no login do MyAnimeList.');
+    } finally {
+      setMalOauthBusy(false);
+    }
+  };
+
+  const disconnectMalOauth = async () => {
+    setMalOauthBusy(true);
+    setMalOauthMessage('');
+    try {
+      await logoutMalAccount();
+      setMalAccount({
+        configured: Boolean(malClientIdInput.trim()),
+        connected: false,
+        redirectUri: MAL_REDIRECT_URI,
+      });
+      setMalOauthMessage('Credencial MyAnimeList removida do Windows Credential Manager.');
+    } catch (error) {
+      setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao desconectar MyAnimeList.');
+    } finally {
+      setMalOauthBusy(false);
+    }
+  };
+
+  const syncMalOauthLibrary = async () => {
+    const clientId = malClientIdInput.trim();
+    if (!clientId || !malAccount?.connected) return;
+
+    setMalOauthBusy(true);
+    setMalOauthMessage('Baixando suas listas de anime e mangá do MyAnimeList…');
+    try {
+      const remote = await fetchMalAccountLibrary(clientId);
+      const report = await importEntries(remote.entries);
+      setMalOauthMessage(
+        `Importação da conta MAL concluída: ${remote.animeCount} anime(s), ${remote.mangaCount} mangá(s) · ${report.added} novo(s), ${report.updated} atualizado(s), ${report.unchanged} sem mudanças.`,
+      );
+      if (remote.entries.length && enrichmentStatus !== 'running') {
+        void startEnrichment(remote.entries);
+      }
+    } catch (error) {
+      setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao sincronizar a conta MAL.');
+    } finally {
+      setMalOauthBusy(false);
+    }
+  };
 
   const selectMalExport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -998,6 +1121,108 @@ function IntegrationsPage() {
   return (
     <section className="section page-section">
       <div className="page-heading"><div><span>PROVIDERS</span><h1>Contas e integrações</h1></div></div>
+
+      <div className="mal-oauth-panel">
+        <div className="mal-oauth-head">
+          <div className="service-icon">MAL</div>
+          <div className="mal-oauth-title">
+            <span>CONTA OFICIAL · OAUTH2 + PKCE</span>
+            <h2>Conectar MyAnimeList</h2>
+            <p>
+              Crie uma aplicação no painel de API do MAL com App Type <strong>other</strong>,
+              registre exatamente o callback abaixo e cole o Client ID. O AnimeDesk abre o
+              navegador para você autorizar; sua senha nunca passa pelo aplicativo. Nesta versão a integração é somente leitura: MAL → AnimeDesk.
+            </p>
+          </div>
+          <span className={malAccount?.connected ? 'oauth-status connected' : 'oauth-status'}>
+            {malAccount?.connected ? 'CONECTADO' : malClientIdInput.trim() ? 'CONFIGURADO' : 'NÃO CONFIGURADO'}
+          </span>
+        </div>
+
+        <div className="mal-oauth-config">
+          <label>
+            <span>CLIENT ID</span>
+            <input
+              type="text"
+              value={malClientIdInput}
+              disabled={!native || malOauthBusy}
+              placeholder="Cole o Client ID da aplicação MAL"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setMalClientIdInput(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>APP REDIRECT URL</span>
+            <code>{MAL_REDIRECT_URI}</code>
+          </label>
+        </div>
+
+        <div className="mal-oauth-security">
+          <strong>Segurança</strong>
+          <span>
+            Access/refresh tokens ficam no Windows Credential Manager e nunca são gravados no SQLite,
+            localStorage ou código-fonte.
+          </span>
+        </div>
+
+        {malAccount?.connected && (
+          <div className="mal-account-profile">
+            <div className="mal-account-avatar">
+              {malAccount.picture
+                ? <img src={malAccount.picture} alt="" />
+                : <CircleUserRound size={28} />}
+            </div>
+            <div>
+              <span>CONTA AUTORIZADA</span>
+              <strong>{malAccount.name || 'MyAnimeList'}</strong>
+              {malAccount.userId && <small>ID {malAccount.userId}</small>}
+            </div>
+          </div>
+        )}
+
+        <div className="mal-oauth-actions">
+          <button
+            className="button secondary"
+            disabled={!native || malOauthBusy}
+            onClick={() => void saveMalOauthConfig()}
+          >
+            Salvar Client ID
+          </button>
+
+          {!malAccount?.connected ? (
+            <button
+              className="button"
+              disabled={!native || malOauthBusy || !malClientIdInput.trim()}
+              onClick={() => void connectMalOauth()}
+            >
+              <Link2 size={15} /> {malOauthBusy ? 'Aguardando autorização…' : 'Conectar ao MAL'}
+            </button>
+          ) : (
+            <>
+              <button
+                className="button"
+                disabled={malOauthBusy || enrichmentStatus === 'running'}
+                onClick={() => void syncMalOauthLibrary()}
+              >
+                <Download size={15} /> {malOauthBusy ? 'Importando da conta…' : 'Importar lista da conta'}
+              </button>
+              <button
+                className="button secondary"
+                disabled={malOauthBusy}
+                onClick={() => void disconnectMalOauth()}
+              >
+                Desconectar
+              </button>
+            </>
+          )}
+        </div>
+
+        {!native && (
+          <div className="mal-oauth-message">OAuth MAL está disponível somente no aplicativo desktop Tauri.</div>
+        )}
+        {malOauthMessage && <div className="mal-oauth-message">{malOauthMessage}</div>}
+      </div>
 
       <div className="mal-import-panel">
         <div className="mal-import-head">

@@ -1486,3 +1486,216 @@ main { min-width: 0; }
     grid-row: 1 / span 3;
   }
 }
+
+.mal-oauth-panel {
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(46, 135, 255, .28);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(46, 135, 255, .10), transparent 34%),
+    var(--panel);
+}
+
+.mal-oauth-head {
+  min-height: 108px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 18px;
+}
+
+.mal-oauth-title > span {
+  color: #60a5fa;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+}
+
+.mal-oauth-title h2 {
+  margin: 4px 0 6px;
+  font-size: 17px;
+}
+
+.mal-oauth-title p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.mal-oauth-title p strong { color: #bfdbfe; }
+
+.oauth-status {
+  padding: 6px 8px;
+  border: 1px solid #343b4d;
+  border-radius: 999px;
+  color: #858fa1;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .8px;
+}
+
+.oauth-status.connected {
+  border-color: rgba(52, 211, 153, .28);
+  color: #34d399;
+  background: rgba(52, 211, 153, .06);
+}
+
+.mal-oauth-config {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1fr);
+  gap: 10px;
+  padding: 0 18px 14px;
+}
+
+.mal-oauth-config label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.mal-oauth-config label > span {
+  color: #7f899b;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .8px;
+}
+
+.mal-oauth-config input,
+.mal-oauth-config code {
+  min-height: 38px;
+  box-sizing: border-box;
+  border: 1px solid #2c3445;
+  border-radius: 9px;
+  color: #d4d9e3;
+  background: #121720;
+  font-size: 10px;
+}
+
+.mal-oauth-config input {
+  width: 100%;
+  padding: 0 11px;
+  outline: none;
+}
+
+.mal-oauth-config input:focus {
+  border-color: #4d78b8;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, .08);
+}
+
+.mal-oauth-config code {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 11px;
+  color: #9bb9e8;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mal-oauth-security {
+  margin: 0 18px 14px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  border: 1px solid rgba(52, 211, 153, .16);
+  border-radius: 9px;
+  background: rgba(52, 211, 153, .04);
+}
+
+.mal-oauth-security strong {
+  flex: 0 0 auto;
+  color: #6ee7b7;
+  font-size: 9px;
+}
+
+.mal-oauth-security span {
+  color: #8792a4;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.mal-account-profile {
+  margin: 0 18px 14px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #131823;
+}
+
+.mal-account-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #9ca6b8;
+  background: #202635;
+}
+
+.mal-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mal-account-profile span,
+.mal-account-profile strong,
+.mal-account-profile small {
+  display: block;
+}
+
+.mal-account-profile span {
+  color: #60a5fa;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .8px;
+}
+
+.mal-account-profile strong {
+  margin-top: 3px;
+  font-size: 12px;
+}
+
+.mal-account-profile small {
+  margin-top: 3px;
+  color: #737d90;
+  font-size: 8px;
+}
+
+.mal-oauth-actions {
+  padding: 0 18px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mal-oauth-message {
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  color: #a6b7d4;
+  background: rgba(10, 12, 18, .24);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+@media (max-width: 850px) {
+  .mal-oauth-head {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+  .mal-oauth-head > .oauth-status {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+  .mal-oauth-config {
+    grid-template-columns: 1fr;
+  }
+}

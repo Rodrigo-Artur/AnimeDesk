@@ -1,0 +1,2 @@
+# Migration checksums are byte-sensitive. Never allow Windows CRLF conversion here.
+src-tauri/migrations/*.sql text eol=lf
