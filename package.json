@@ -1,7 +1,7 @@
 {
   "name": "animedesk",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Desktop anime and manga tracker with schedules, alerts and streaming integrations.",
   "main": "electron/main.cjs",
   "type": "module",

@@ -16,7 +16,7 @@ A primeira base funcional já inclui:
 - Notificações nativas do Windows com teste pela interface.
 - Dashboard com estatísticas locais.
 - Busca real de animes e mangás diretamente no MyAnimeList pelo backend Rust no Tauri; o cliente usa TLS nativo do Windows. Jikan permanece para recursos complementares/modo web quando acessível.
-- Cache local de capas: ao adicionar pelo Explorar, o Tauri baixa a imagem para `AppData\\com.animedesk.app\\covers` e passa a usar a cópia offline.
+- Cache local de capas: ao adicionar pelo Explorar, o Tauri baixa a imagem para `AppData\\com.animedesk.app\\covers` e passa a usar a cópia offline. Validado end-to-end na 0.4.2 com 5/5 títulos da biblioteca usando arquivos locais JPEG válidos.
 - Importação de biblioteca do MyAnimeList por `.xml` ou `.xml.gz`, com preview, merge por MAL ID, status, progresso, nota e proteção contra duplicados.
 - Enriquecimento automático pós-importação: resolve MAL ID → Kitsu em lotes de 20, preenche capa/sinopse/gêneros/ano/score público/totais quando disponíveis, preserva dados pessoais e baixa capas offline.
 - Fila de enriquecimento com progresso, cancelamento, falhas por item, retry e execução em segundo plano mesmo ao trocar de tela.
@@ -28,7 +28,7 @@ A primeira base funcional já inclui:
 - UI de mappings 0.4.1 em Integrações: selecionar uma obra, inspecionar provider/ID/confidence/verified, adicionar mappings manuais verificados, detectar conflitos e remover mappings auxiliares; o MAL ID canônico é protegido.
 - Persistência de estado 0.3.1: preferências de alertas, cache de descoberta, cache semanal da agenda, marcadores de notificações e timestamps de last-sync usam SQLite no Tauri, com migração automática do localStorage legado e fallback web.
 - Releases da biblioteca encontrados pela Agenda também são normalizados na tabela `releases`, com deduplicação explícita.
-- Testes automatizados com Vitest + happy-dom; na 0.4.1 a suíte soma 18 testes cobrindo normalizador/mappings, parser MAL, enriquecimento Kitsu, recomendações, Agenda e estatísticas.
+- Testes automatizados com Vitest + happy-dom; na 0.4.2 a suíte soma 24 testes cobrindo normalizador/mappings, parser MAL, enriquecimento Kitsu, recomendações, Agenda, appState, store da biblioteca e estatísticas.
 - Parser XML do MAL endurecido para usar APIs XML nativas (`getElementsByTagName`) em vez de depender de seletores CSS.
 - Biblioteca com status, progresso e histórico manual de episódios/capítulos.
 - Tela **Histórico e estatísticas** 0.4.0 baseada no SQLite: totais de anime/mangá, concluídos/em andamento/planejados, episódios, capítulos, horas estimadas, nota média pessoal, gêneros, atividade dos últimos 6 meses, origem por provider e linha do tempo recente.
@@ -192,7 +192,7 @@ A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. 
 
 ## Próximas etapas
 
-1. Expandir testes para store de biblioteca, cache expirado e notification markers.
+1. Expandir testes para cache expirado, notification markers e conflitos runtime Tauri/SQLite.
 2. Adicionar afinidade por estúdio quando uma fonte confiável estiver disponível.
 3. Implementar OAuth oficial do MyAnimeList quando o Client ID estiver disponível.
 4. Implementar importador de histórico Netflix.
