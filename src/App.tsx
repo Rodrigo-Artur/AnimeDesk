@@ -42,7 +42,13 @@ import {
   MAL_REDIRECT_URI,
   setMalClientId,
 } from './services/malOAuth';
-import type { MalAccountStatus } from './services/malOAuth';
+import type { MalAccountImport, MalAccountStatus } from './services/malOAuth';
+import {
+  buildMalSyncPlan,
+  loadMalSyncBaseline,
+  saveMalSyncBaseline,
+} from './services/malSync';
+import type { MalSyncKind, MalSyncPlan } from './services/malSync';
 import {
   getAutostartEnabled,
   sendNativeTestNotification,
@@ -79,6 +85,28 @@ const navItems: Array<{ id: Page; label: string; icon: typeof Home }> = [
   { id: 'integrations', label: 'Integrações', icon: Link2 },
   { id: 'settings', label: 'Configurações', icon: Settings },
 ];
+
+const malSyncKinds: MalSyncKind[] = [
+  'equal',
+  'remote_only',
+  'remote_changed',
+  'local_only',
+  'local_changed',
+  'local_removed',
+  'remote_removed',
+  'conflict',
+];
+
+const malSyncKindLabels: Record<MalSyncKind, string> = {
+  equal: 'Iguais',
+  remote_only: 'Só no MAL',
+  local_only: 'Só no AnimeDesk',
+  remote_changed: 'MAL mais novo',
+  local_changed: 'Local mais novo',
+  remote_removed: 'Removido no MAL',
+  local_removed: 'Removido localmente',
+  conflict: 'Conflitos',
+};
 
 function MediaCard({
   media,
@@ -969,6 +997,8 @@ function IntegrationsPage() {
   const [malAccount, setMalAccount] = useState<MalAccountStatus | null>(null);
   const [malOauthBusy, setMalOauthBusy] = useState(false);
   const [malOauthMessage, setMalOauthMessage] = useState('');
+  const [malSyncPlan, setMalSyncPlan] = useState<MalSyncPlan | null>(null);
+  const [malRemoteSnapshot, setMalRemoteSnapshot] = useState<MalAccountImport | null>(null);
 
   useEffect(() => {
     if (!native) return;
@@ -1048,6 +1078,8 @@ function IntegrationsPage() {
         connected: false,
         redirectUri: MAL_REDIRECT_URI,
       });
+      setMalSyncPlan(null);
+      setMalRemoteSnapshot(null);
       setMalOauthMessage('Credencial MyAnimeList removida do Windows Credential Manager.');
     } catch (error) {
       setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao desconectar MyAnimeList.');
@@ -1056,23 +1088,71 @@ function IntegrationsPage() {
     }
   };
 
-  const syncMalOauthLibrary = async () => {
+  const previewMalOauthSync = async () => {
     const clientId = malClientIdInput.trim();
     if (!clientId || !malAccount?.connected) return;
 
     setMalOauthBusy(true);
-    setMalOauthMessage('Baixando suas listas de anime e mangá do MyAnimeList…');
+    setMalOauthMessage('Baixando estado remoto do MyAnimeList para montar a prévia…');
     try {
-      const remote = await fetchMalAccountLibrary(clientId);
-      const report = await importEntries(remote.entries);
+      const [remote, baseline] = await Promise.all([
+        fetchMalAccountLibrary(clientId),
+        loadMalSyncBaseline(),
+      ]);
+      const plan = buildMalSyncPlan(entries, remote.entries, baseline);
+      setMalRemoteSnapshot(remote);
+      setMalSyncPlan(plan);
       setMalOauthMessage(
-        `Importação da conta MAL concluída: ${remote.animeCount} anime(s), ${remote.mangaCount} mangá(s) · ${report.added} novo(s), ${report.updated} atualizado(s), ${report.unchanged} sem mudanças.`,
+        `Prévia pronta: ${remote.animeCount} anime(s), ${remote.mangaCount} mangá(s). Nenhuma mudança foi aplicada.`,
       );
-      if (remote.entries.length && enrichmentStatus !== 'running') {
-        void startEnrichment(remote.entries);
+    } catch (error) {
+      setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao analisar a sincronização MAL.');
+    } finally {
+      setMalOauthBusy(false);
+    }
+  };
+
+  const applySafeMalOauthSync = async () => {
+    if (!malSyncPlan || !malRemoteSnapshot) return;
+    const safeEntries = malSyncPlan.safeRemoteEntries;
+    if (!safeEntries.length && !malSyncPlan.canAdvanceBaseline) return;
+
+    setMalOauthBusy(true);
+    setMalOauthMessage('Aplicando somente mudanças remotas classificadas como seguras…');
+    try {
+      let report = { total: 0, added: 0, updated: 0, unchanged: 0 };
+      if (safeEntries.length) {
+        report = await importEntries(safeEntries);
+      }
+
+      let baseline = await loadMalSyncBaseline();
+      const baselineAdvanced = malSyncPlan.canAdvanceBaseline;
+      if (baselineAdvanced) {
+        baseline = await saveMalSyncBaseline(
+          malRemoteSnapshot.entries,
+          new Date(malSyncPlan.observedAt),
+        );
+      }
+
+      const refreshedPlan = buildMalSyncPlan(
+        useLibraryStore.getState().entries,
+        malRemoteSnapshot.entries,
+        baseline,
+      );
+      setMalSyncPlan(refreshedPlan);
+
+      const baselineMessage = baselineAdvanced
+        ? 'Baseline remoto confirmado.'
+        : 'Baseline preservado porque ainda há conflito ou remoção remota pendente.';
+      setMalOauthMessage(
+        `Sync seguro concluído: ${report.added} novo(s), ${report.updated} atualizado(s), ${report.unchanged} sem mudanças. ${baselineMessage}`,
+      );
+
+      if (safeEntries.length && enrichmentStatus !== 'running') {
+        void startEnrichment(safeEntries);
       }
     } catch (error) {
-      setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao sincronizar a conta MAL.');
+      setMalOauthMessage(error instanceof Error ? error.message : 'Falha ao aplicar a sincronização MAL.');
     } finally {
       setMalOauthBusy(false);
     }
@@ -1203,9 +1283,9 @@ function IntegrationsPage() {
               <button
                 className="button"
                 disabled={malOauthBusy || enrichmentStatus === 'running'}
-                onClick={() => void syncMalOauthLibrary()}
+                onClick={() => void previewMalOauthSync()}
               >
-                <Download size={15} /> {malOauthBusy ? 'Importando da conta…' : 'Importar lista da conta'}
+                <Download size={15} /> {malOauthBusy ? 'Analisando conta…' : 'Analisar sincronização'}
               </button>
               <button
                 className="button secondary"
@@ -1217,6 +1297,80 @@ function IntegrationsPage() {
             </>
           )}
         </div>
+
+        {malSyncPlan && (
+          <div className="mal-sync-preview">
+            <div className="mal-sync-summary">
+              <div>
+                <span>PRÉVIA DE SINCRONIZAÇÃO</span>
+                <strong>{malSyncPlan.items.length} item(ns) comparado(s)</strong>
+                <small>
+                  {malSyncPlan.hadBaseline
+                    ? 'Comparação de três vias com o último baseline remoto confirmado.'
+                    : 'Primeira comparação: diferenças compartilhadas são tratadas como conflito por segurança.'}
+                </small>
+              </div>
+              <button
+                className="button"
+                disabled={
+                  malOauthBusy ||
+                  (!malSyncPlan.safeRemoteEntries.length && !malSyncPlan.canAdvanceBaseline)
+                }
+                onClick={() => void applySafeMalOauthSync()}
+              >
+                {malSyncPlan.safeRemoteEntries.length
+                  ? `Aplicar ${malSyncPlan.safeRemoteEntries.length} mudança(s) segura(s)`
+                  : malSyncPlan.canAdvanceBaseline
+                    ? 'Confirmar baseline remoto'
+                    : 'Aguardando resolução'}
+              </button>
+            </div>
+
+            <div className="mal-sync-counts">
+              {malSyncKinds.map((kind) => (
+                <div key={kind} className={`mal-sync-count ${kind}`}>
+                  <strong>{malSyncPlan.counts[kind]}</strong>
+                  <span>{malSyncKindLabels[kind]}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mal-sync-guidance">
+              <strong>O que será aplicado automaticamente</strong>
+              <span>
+                Apenas itens que existem somente no MAL ou que mudaram somente no MAL. Mudanças locais,
+                conflitos e remoções nunca são sobrescritos silenciosamente.
+              </span>
+              {!malSyncPlan.canAdvanceBaseline && (
+                <span className="warning">
+                  O baseline não será avançado enquanto existir conflito ou item removido no MAL.
+                </span>
+              )}
+            </div>
+
+            {malSyncPlan.items.some((item) => item.kind !== 'equal') && (
+              <div className="mal-sync-items">
+                {malSyncPlan.items
+                  .filter((item) => item.kind !== 'equal')
+                  .slice(0, 12)
+                  .map((item) => (
+                    <div className="mal-sync-item" key={item.key}>
+                      <div>
+                        <strong>{item.title}</strong>
+                        <span>{item.type === 'anime' ? 'Anime' : 'Mangá'} · MAL #{item.malId}</span>
+                      </div>
+                      <b className={`mal-sync-kind ${item.kind}`}>{malSyncKindLabels[item.kind]}</b>
+                    </div>
+                  ))}
+                {malSyncPlan.items.filter((item) => item.kind !== 'equal').length > 12 && (
+                  <small>
+                    +{malSyncPlan.items.filter((item) => item.kind !== 'equal').length - 12} item(ns) fora da prévia resumida.
+                  </small>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {!native && (
           <div className="mal-oauth-message">OAuth MAL está disponível somente no aplicativo desktop Tauri.</div>

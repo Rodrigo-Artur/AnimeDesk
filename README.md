@@ -196,13 +196,48 @@ Cada serviço externo deve permanecer isolado. Se um endpoint privado mudar, ape
 
 A migration inicial está congelada em `src-tauri/migrations/0001_initial.sql`. A migration `0002_add_studios.sql` adiciona `media.studios_json`. Não altere migrations já aplicadas: mudanças futuras do banco devem ser adicionadas como `0003_...`, `0004_...` etc. Isso evita incompatibilidade de checksum em instalações existentes.
 
-## Próximas etapas
+## Estado do próximo update
 
-1. Testar o login OAuth real com um Client ID registrado no painel do MAL.
-2. Implementar escrita opcional MAL (progresso/status/nota) com resolução explícita de conflitos.
-3. Expandir testes para cache expirado, notification markers e conflitos runtime Tauri/SQLite.
-4. Implementar importador de histórico Netflix.
-5. Implementar CrunchyrollProvider somente leitura.
-6. Evoluir a UI de mappings com histórico/auditoria e resolução assistida.
-7. Evoluir estatísticas com filtros por período/provider e duração real quando providers externos fornecerem esse dado.
-8. Polir ícone, CSP, identifier, instalador e atualização automática.
+A versão estável atual é a 0.5.0.
+
+A branch em desenvolvimento é:
+
+`feature/mal-sync-planner-0.5.1`
+
+A 0.5.1 implementa o planner seguro de sincronização MAL:
+- compara local, remoto e baseline;
+- classifica equal/remote_only/local_only/remote_changed/local_changed/remote_removed/local_removed/conflict;
+- integra o planner ao OAuth read-only antes de qualquer importação;
+- mostra preview e contagens na UI;
+- aplica automaticamente somente mudanças remotas seguras;
+- preserva conflitos e remoções para decisão explícita;
+- não escreve no MAL.
+
+A implementação local passou 34/34 testes, build, lint e Tauri/NSIS. Ainda falta validar o fluxo real com um Client ID MAL e, depois desse gate, promover versão/tag 0.5.1.
+
+## Roadmap resumido
+
+1. **0.5.1** — planner MAL read-only + preview de sync.
+2. **0.5.2** — resolução explícita de conflitos.
+3. **0.5.3** — escrita MAL opcional de progresso/status/score.
+4. **0.5.4** — sync jobs, auditoria e histórico de sincronização.
+5. **0.6.0** — importador Netflix.
+6. **0.6.1** — assistente de matching.
+7. **0.6.2** — estatísticas multi-provider.
+8. **0.7.x** — Crunchyroll/Prime e providers de mídia pessoal.
+9. **0.8.x** — mangá releases e biblioteca avançada.
+10. **0.9.x** — refatoração, hardening, updater e instalador.
+11. **1.0.0** — primeira versão estável.
+
+Antes da 1.0 também faltam:
+- validar OAuth MAL com conta real;
+- backup/export completo do AnimeDesk;
+- CSP explícita;
+- remover Electron quando não for mais necessário;
+- assinatura/updater;
+- testes de upgrade de migrations;
+- UI de conflitos/auditoria;
+- pelo menos um importador externo funcional.
+
+O planejamento detalhado e critérios de aceite estão no Obsidian:
+`Projetos/AnimeDesk/AnimeDesk-29-PLANEJAMENTO-UPDATES-FUTUROS.md`.
